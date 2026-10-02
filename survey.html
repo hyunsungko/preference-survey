@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 대화 선호 진단</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--ink:#1d1f23;--sub:#666b73;--line:#e3e0d8;--accent:#2f6f5e;--accent-ink:#fff;--soft:#eaf2ee;--hi:#2f6f5e;--mid:#b07f2a;--lo:#a5482b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141517;--card:#1d1f22;--ink:#ecebe7;--sub:#9a9ea5;--line:#2c2f33;--accent:#6cc0a6;--accent-ink:#0f1412;--soft:#1f2a27;--hi:#6cc0a6;--mid:#e0b25e;--lo:#e07a5a}}
+:root[data-theme="dark"]{--bg:#141517;--card:#1d1f22;--ink:#ecebe7;--sub:#9a9ea5;--line:#2c2f33;--accent:#6cc0a6;--accent-ink:#0f1412;--soft:#1f2a27;--hi:#6cc0a6;--mid:#e0b25e;--lo:#e07a5a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;word-break:keep-all;overflow-wrap:anywhere}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px 56px}
+h1{font-size:26px;line-height:1.3;margin:8px 0 12px}
+h2{font-size:19px;margin:0 0 10px}
+h3{font-size:16px;margin:14px 0 6px}
+p{margin:0 0 10px}
+.muted{color:var(--sub);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 16px;margin-bottom:14px}
+@media(max-width:360px){.wrap{padding:16px 10px 48px}.card{padding:16px 12px}}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 18px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:600;cursor:pointer;touch-action:manipulation}
+.btn:focus-visible,.opt:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.full{width:100%}
+ul.plain{padding-left:18px;margin:8px 0 14px}ul.plain li{margin:4px 0}
+.top{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.bar{flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);transition:width .25s ease-out}
+.count{font-size:13px;color:var(--sub);white-space:nowrap}
+.part{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.04em;margin-bottom:6px}
+.chip{display:inline-block;font-size:12px;padding:2px 10px;border-radius:999px;background:var(--soft);color:var(--accent);margin-bottom:8px}
+.prompt{font-size:17px;font-weight:600;margin-bottom:12px}
+.opts{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:14px}
+@media(min-width:620px){.opts.two{grid-template-columns:1fr 1fr}}
+.opt{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 14px 12px;white-space:pre-line}
+.opt b{display:inline-block;font-size:13px;color:var(--sub);margin-bottom:4px}
+button.opt{font:inherit;color:inherit;text-align:left;cursor:pointer;width:100%}
+button.opt:hover{border-color:var(--accent)}
+.scale{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.scale .btn{padding:0 4px;font-size:15px;flex-direction:column;line-height:1.25;min-height:56px}
+.scale .btn small{font-weight:400;color:var(--sub);font-size:12px}
+.ox{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.skip{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.skip .btn{min-height:44px;font-weight:400;font-size:14px;color:var(--sub)}
+.fu-on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.likert{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin:12px 0 6px}
+.likert .btn{padding:0;min-height:48px;border-radius:50%;aspect-ratio:1;font-size:14px;max-width:52px;width:100%;justify-self:center}
+.poles{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:var(--sub)}
+.poles span:last-child{text-align:right}
+textarea{width:100%;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);padding:10px;font:15px/1.5 inherit}
+textarea.code{min-height:90px;font:12px/1.4 ui-monospace,Consolas,monospace;word-break:break-all}
+textarea.free{min-height:110px}
+.badge{display:inline-block;padding:3px 12px;border-radius:999px;font-size:13px;font-weight:700;color:#fff}
+.g-high{background:var(--hi)}.g-mid{background:var(--mid)}.g-low{background:var(--lo)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td{padding:8px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+td:last-child{text-align:right;white-space:nowrap}
+.axrow{padding:10px 0 4px;border-bottom:1px solid var(--line)}
+.axrow:last-of-type{border-bottom:0}
+.axhead{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;font-size:13px;color:var(--sub);align-items:end}
+.axhead b{color:var(--ink);font-size:15px;text-align:center}
+.axhead span:last-child{text-align:right}
+.track{position:relative;height:34px;margin:2px 8px 0}
+.track::before{content:"";position:absolute;left:0;right:0;top:15px;height:5px;border-radius:3px;background:var(--line)}
+.track .mid{position:absolute;left:50%;top:9px;width:1.5px;height:17px;background:var(--sub)}
+.track .band{position:absolute;top:11px;height:13px;border-radius:7px;opacity:.25}
+.track .f{position:absolute;top:8px;width:19px;height:19px;border-radius:50%;transform:translateX(-50%);border:2px solid var(--card)}
+.track .s{position:absolute;top:-3px;transform:translateX(-50%);font-size:11px;color:var(--sub);line-height:1}
+.track .r{position:absolute;top:27px;width:7px;height:7px;transform:translateX(-50%);background:var(--sub)}
+.sitrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
+.sitrow:last-child{border-bottom:0}
+.sitrow b{white-space:nowrap}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--sub);margin-top:6px}
+pre{white-space:pre-wrap;background:var(--soft);border-radius:12px;padding:12px;font-size:14px;margin:0 0 10px;font-family:inherit}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.note{background:var(--soft);border-radius:12px;padding:10px 12px;font-size:14px;margin:8px 0}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="app"></div>
+</div>
+<script>
+/* score.js — AI 대화 선호 진단 채점 (브라우저·Node 공용, v1.2 2026-10-02)
+ *
+ * bank = items.json 내용 + bank.deep(deep.json 내용)
+ * 응답 형식(answers)
+ *   ab[id]   = {s, r, t}  s: 0이면 '가'에 왼쪽 극(left), 1이면 '가'에 오른쪽 극(right)
+ *                          r: -2 확실히 가, -1 조금 가, 1 조금 나, 2 확실히 나 / t: 응답 시간(ms)
+ *                          r: 0이면 고르지 않음 — u:1 잘 모르겠다, x:1 둘 다 싫다(note: 어떻게 고치면 좋을지)
+ *   deep[id] = {s, r, t}  심층 설문 고르기(형식은 ab와 같음)
+ *   tone[id] = {c, t}     c: 고른 말투(formal|polite|memo|casual), "none"이면 모두 별로(note)
+ *   ox[id]   = 1(거슬린다) | 0(괜찮다) | 2(잘 모르겠다)
+ *   sl[axis] = 1~N        말로 답한 선호(1=왼쪽 극, N=오른쪽 극, N=bank.slider_points)
+ *   att      = {s, r, t}  집중 확인 문항
+ *   open[id] = "글"       주관식(자동 채점하지 않음)
+ *   b        = 문항 은행 id(사용자에 맞게 짠 은행이면 그 id)
+ * 점수는 -1(왼쪽 극) ~ +1(오른쪽 극). |점수| < 0.25는 "가운데".
+ */
+(function (root) {
+  "use strict";
+  var RESP = { "-2": -1, "-1": -0.5, "1": 0.5, "2": 1 };
+  var MID = 0.25, STRONG = 0.6;
+
+  function sign(x) { return x > 0 ? 1 : x < 0 ? -1 : 0; }
+  function mean(a) { return a.length ? a.reduce(function (s, x) { return s + x; }, 0) / a.length : null; }
+  function pearson(x, y) {
+    var n = x.length; if (n < 3) return null;
+    var mx = mean(x), my = mean(y), sxy = 0, sxx = 0, syy = 0;
+    for (var i = 0; i < n; i++) { sxy += (x[i] - mx) * (y[i] - my); sxx += (x[i] - mx) * (x[i] - mx); syy += (y[i] - my) * (y[i] - my); }
+    if (sxx === 0 || syy === 0) return null;
+    return sxy / Math.sqrt(sxx * syy);
+  }
+  function poleScore(a) {
+    var v = RESP[String(a.r)];
+    if (v === undefined) return null;
+    return a.s === 0 ? v : -v;
+  }
+  function minMs(it) { return Math.max(1200, (it.prompt.length + it.left.length + it.right.length) * 10); }
+  function strengthOf(F) { return Math.abs(F) >= STRONG ? "강함" : Math.abs(F) >= MID ? "약함" : "가운데"; }
+
+  function axisRows(bank, ans, axisId, sets) {
+    var rows = [];
+    bank.ab.forEach(function (it) {
+      if (it.axis !== axisId || (sets && sets.indexOf(it.set) < 0)) return;
+      var a = ans.ab && ans.ab[it.id]; if (!a) return;
+      var s = poleScore(a); if (s === null) return;
+      var fast = a.t < minMs(it);
+      rows.push({ id: it.id, set: it.set, s: s, w: fast ? 0.5 : 1, fast: fast });
+    });
+    return rows;
+  }
+
+  function needsReserve(bank, ans, axisId) {
+    var rows = axisRows(bank, ans, axisId, ["a1", "a2", "a1r"]);
+    var skipped = bank.ab.some(function (it) {
+      var a = ans.ab && ans.ab[it.id];
+      return it.axis === axisId && it.set !== "a3" && a && !a.r;
+    });
+    if (skipped) return true;
+    if (rows.length < 3) return false;
+    var signs = rows.map(function (r) { return sign(r.s); });
+    return !signs.every(function (x) { return x === signs[0]; });
+  }
+
+  // v1.0 답은 직접 답하기가 7점이었다(v1.1부터 5점)
+  function sliderScore(bank, v, ver) {
+    if (!v) return null;
+    var p = ver === "1.0" ? 7 : (bank.slider_points || 7), mid = (p + 1) / 2;
+    return Math.max(-1, Math.min(1, (v - mid) / (mid - 1)));
+  }
+
+  function axisResult(bank, ans, ax) {
+    var rows = axisRows(bank, ans, ax.id);
+    var W = rows.reduce(function (t, r) { return t + r.w; }, 0);
+    var R = W ? rows.reduce(function (t, r) { return t + r.w * r.s; }, 0) / W : 0;
+    var C = W ? Math.abs(rows.reduce(function (t, r) { return t + r.w * sign(r.s); }, 0)) / W : 0;
+    var a1 = rows.filter(function (r) { return r.set === "a1"; })[0];
+    var a1r = rows.filter(function (r) { return r.set === "a1r"; })[0];
+    var retest = (a1 && a1r) ? sign(a1.s) === sign(a1r.s) : null;
+    var S = sliderScore(bank, ans.sl && ans.sl[ax.id], ans.v);
+    var F = S === null ? R : 0.7 * R + 0.3 * S;  // 고른 선호(R)를 말로 답한 선호(S)보다 무겁게 본다
+    var sayDiff = S !== null && Math.abs(S) >= 0.3 && Math.abs(R) >= 0.3 && sign(S) !== sign(R);
+    var grade;
+    if (C >= 0.6 && retest !== false && !sayDiff) grade = "높음";
+    else if (C < 0.34 || (retest === false && C < 0.6)) grade = "낮음";
+    else grade = "보통";
+    var dir = Math.abs(F) < MID ? 0 : sign(F);
+    var unsureN = 0, bothBadN = 0;
+    bank.ab.forEach(function (it) {
+      if (it.axis !== ax.id) return;
+      var a = ans.ab && ans.ab[it.id]; if (!a || a.r) return;
+      if (a.x) bothBadN++; else unsureN++;
+    });
+    // 고르지 못한 문항이 2개 이상이거나, 재검사 짝을 건너뛰어 재검사를 못 했으면 높음을 주지 않는다
+    if (unsureN + bothBadN >= 2 || (retest === null && unsureN + bothBadN >= 1)) grade = grade === "높음" ? "보통" : grade;
+    return {
+      id: ax.id, name: ax.name, left: ax.left, right: ax.right, unsureN: unsureN, bothBadN: bothBadN,
+      R: R, S: S, F: F, C: C, retest: retest, sayDiff: sayDiff, grade: grade, dir: dir, strength: strengthOf(F),
+      n: rows.length, fast: rows.filter(function (r) { return r.fast; }).length,
+      rule: dir < 0 ? ax.rule_left : dir > 0 ? ax.rule_right : null,
+      pole: dir < 0 ? ax.left : dir > 0 ? ax.right : "가운데",
+      unclear: grade === "낮음" || dir === 0 || unsureN + bothBadN >= 2
+    };
+  }
+
+  // 길이 축이 아닌 문항에서 두 답의 글자 수가 2자 이상 다르면 긴 쪽을 골랐는지 센다.
+  // 문항은 축마다 길이 방향을 반반으로 섞어 두었으므로, 한쪽으로 크게 쏠리면 길이만 보고 고른 것이다.
+  function lengthPull(bank, ans) {
+    var n = 0, longer = 0;
+    bank.ab.forEach(function (it) {
+      if (it.axis === "length") return;
+      var a = ans.ab && ans.ab[it.id]; if (!a) return;
+      var dl = it.right.length - it.left.length;
+      if (Math.abs(dl) < 2) return;
+      var s = poleScore(a); if (s === null) return;
+      n++; if (sign(s) === sign(dl)) longer++;
+    });
+    var share = n >= 5 ? longer / n : null;
+    var bias = share !== null && n >= 10 && (share >= 0.85 || share <= 0.15);
+    return { n: n, share: share, bias: bias, side: bias ? (share >= 0.5 ? "long" : "short") : null };
+  }
+
+  function toneResult(bank, ans) {
+    var styles = bank.tone.styles, picks = {}, counts = {};
+    Object.keys(styles).forEach(function (k) { counts[k] = 0; });
+    bank.tone.items.forEach(function (it) {
+      var a = ans.tone && ans.tone[it.id]; if (!a || !styles[a.c]) return;   // "none"(모두 별로)은 고른 말투로 세지 않는다
+      picks[it.id] = a.c; counts[a.c]++;
+    });
+    var bySet = {};
+    bank.tone.items.forEach(function (it) { bySet[it.set] = it; });
+    function p(set) { return bySet[set] ? picks[bySet[set].id] : undefined; }
+    function ctx(set) { return bySet[set] ? bySet[set].context : set; }
+    var work = p("t1"), workR = p("t1r");
+    var byContext = [
+      { context: ctx("t1"), pick: work && work === workR ? work : null, shaky: !!(work && workR && work !== workR), picks: [work, workR] },
+      { context: ctx("t2"), pick: p("t2") || null },
+      { context: ctx("t3"), pick: p("t3") || null }
+    ];
+    var chosen = byContext.map(function (c) { return c.pick; }).filter(Boolean);
+    var allSame = chosen.length === 3 && chosen.every(function (x) { return x === chosen[0]; });
+    var rules = [];
+    if (allSame) rules.push("말투: 어느 상황에서나 " + bank.tone.rule[chosen[0]] + ".");
+    else byContext.forEach(function (c) { if (c.pick) rules.push("말투(" + c.context + "): " + bank.tone.rule[c.pick] + "."); });
+    return { picks: picks, counts: counts, byContext: byContext, retest: work && workR ? work === workR : null, rules: rules };
+  }
+
+  // 심층 설문: 축마다 상황별 점수를 낸다. 상황끼리 방향이 다르면 상황별 규칙을 만든다
+  function deepResult(bank, ans) {
+    var D = bank.deep; if (!D || !ans.deep) return [];
+    var out = [];
+    Object.keys(D.situations).forEach(function (axisId) {
+      var ax = bank.axes.filter(function (a) { return a.id === axisId; })[0];
+      var sits = D.situations[axisId].map(function (sit) {
+        var ss = [];
+        D.items.forEach(function (it) {
+          if (it.axis !== axisId || it.sit !== sit.id) return;
+          var a = ans.deep[it.id]; if (!a) return;
+          var s = poleScore(a); if (s !== null) ss.push(s);
+        });
+        if (!ss.length) return null;
+        var m = mean(ss), agree = ss.every(function (x) { return sign(x) === sign(ss[0]); });
+        var dir = (!agree && Math.abs(m) < 0.5) || Math.abs(m) < MID ? 0 : sign(m);
+        return { id: sit.id, name: sit.name, score: m, agree: agree, dir: dir,
+                 pole: dir < 0 ? ax.left : dir > 0 ? ax.right : "가운데", strength: strengthOf(m),
+                 rule: dir < 0 ? ax.rule_left : dir > 0 ? ax.rule_right : null };
+      }).filter(Boolean);
+      if (!sits.length) return;
+      var dirs = sits.map(function (s) { return s.dir; }).filter(function (d) { return d !== 0; });
+      // 답한 상황이 3개 미만이면 몇 상황만 보고 축 전체 규칙을 만들지 않는다(추가 설문에서 상황 하나만 물은 경우 등)
+      var same = sits.length >= 3 && dirs.length === sits.length && dirs.every(function (d) { return d === dirs[0]; });
+      var mixed = dirs.some(function (d) { return d !== dirs[0]; });
+      var rules = [];
+      if (same) rules.push((dirs[0] < 0 ? ax.rule_left : ax.rule_right) + " (상황별 질문에서도 같음)");
+      else sits.forEach(function (s) { if (s.rule) rules.push(s.name + ": " + s.rule); });
+      var head = same ? null : "[" + ax.name + "] " + (mixed ? "상황에 따라 다르게 한다." : "아래 상황에서는 이렇게 한다(다른 상황은 정하지 않았다).");
+      out.push({ id: axisId, name: ax.name, left: ax.left, right: ax.right, situations: sits, sameAll: same, head: head, rules: rules });
+    });
+    return out;
+  }
+
+  function score(bank, ans, opts) {
+    opts = opts || {};
+    var axes = bank.axes.map(function (ax) { return axisResult(bank, ans, ax); });
+
+    // 반분 신뢰도: 축마다 a1과 a2 점수를 두 반으로 보고 상관을 구한 뒤 Spearman-Brown으로 고친다
+    var x = [], y = [], rx = [], ry = [];
+    bank.axes.forEach(function (ax) {
+      var r1 = axisRows(bank, ans, ax.id, ["a1"])[0], r2 = axisRows(bank, ans, ax.id, ["a2"])[0], r1r = axisRows(bank, ans, ax.id, ["a1r"])[0];
+      if (r1 && r2) { x.push(r1.s); y.push(r2.s); }
+      if (r1 && r1r) { rx.push(r1.s); ry.push(r1r.s); }
+    });
+    var rHalf = pearson(x, y);
+    var sb = rHalf === null ? null : (2 * rHalf) / (1 + rHalf);
+    var rRetest = pearson(rx, ry);
+    var agree = rx.length >= 3 ? rx.filter(function (v, i) { return sign(v) === sign(ry[i]); }).length / rx.length : null;
+
+    var allAb = Object.keys(ans.ab || {}).map(function (k) { return ans.ab[k]; });
+    var abAns = allAb.filter(function (a) { return a.r; });
+    var rightShare = abAns.length ? abAns.filter(function (a) { return a.r > 0; }).length / abAns.length : null;
+    var mildShare = abAns.length ? abAns.filter(function (a) { return Math.abs(a.r) === 1; }).length / abAns.length : null;
+    var fastN = axes.reduce(function (t, a) { return t + a.fast; }, 0);
+    var posBias = rightShare !== null && abAns.length >= 10 && (rightShare > 0.8 || rightShare < 0.2);
+    var attPass = ans.att ? ans.att.r === bank.attention.expect : null;
+    var lp = lengthPull(bank, ans);
+    var unsureShare = allAb.length ? (allAb.length - abAns.length) / allAb.length : null;
+
+    var overall;
+    if (attPass === false || (sb !== null && sb < 0.3) || (agree !== null && agree < 0.5)) overall = "참고용";
+    else if (attPass && (sb === null || sb >= 0.6) && (agree === null || agree >= 0.7) && !posBias && !lp.bias && !(unsureShare > 0.3)) overall = "믿을 만함";
+    else overall = "대체로 믿을 만함";
+
+    // 한쪽 극 몰림: 왼쪽 극은 대개 간결·직접, 오른쪽 극은 자세히·친절이라 한 가지 성향이 여러 축에 번질 수 있다.
+    // 그런 사람일 수도 있으므로 종합을 내리지 않고 표시만 한다(지침을 넣은 뒤 A/B 검증을 권한다).
+    var leftN = axes.filter(function (a) { return !a.unclear && a.dir < 0; }).length, rightN = axes.filter(function (a) { return !a.unclear && a.dir > 0; }).length;
+    var oneSide = Math.max(leftN, rightN) >= 10 ? { side: leftN > rightN ? "left" : "right", n: Math.max(leftN, rightN), total: axes.length } : null;
+
+    var tone = toneResult(bank, ans);
+    var ox = bank.ox.map(function (o) { return { id: o.id, text: o.text, rule: o.rule, dislike: ans.ox ? ans.ox[o.id] === 1 : null }; });
+    var deep = deepResult(bank, ans);
+    var deepIds = deep.map(function (d) { return d.id; });
+
+    var clear = axes.filter(function (a) { return !a.unclear; }).sort(function (a, b) { return Math.abs(b.F) - Math.abs(a.F); });
+    var strong = clear.filter(function (a) { return a.strength === "강함"; });
+    var unclear = axes.filter(function (a) { return a.unclear; });
+
+    var date = (opts.date || ans.d || "").slice(0, 10);
+    var lines = [];
+    tone.rules.forEach(function (r) { lines.push("- " + r); });
+    clear.forEach(function (a) { if (deepIds.indexOf(a.id) < 0) lines.push("- " + a.rule); });
+    deep.forEach(function (d) {
+      if (d.rules.length === 1 && d.sameAll) lines.push("- " + d.rules[0]);
+      else if (d.rules.length) { lines.push("- " + d.head); d.rules.forEach(function (r) { lines.push("  - " + r); }); }
+    });
+    ox.filter(function (o) { return o.dislike; }).forEach(function (o) { lines.push("- " + o.rule); });
+    var rules = ["## 대화 선호 (선호 진단 " + date + ", 신뢰도 " + overall + ")", ""].concat(lines).join("\n");
+
+    var unsure = [];
+    function collectUnsure(list, store, round) {
+      (list || []).forEach(function (it) {
+        var a = store && store[it.id]; if (!a || a.r) return;
+        unsure.push({ id: it.id, axis: it.axis, sit: it.sit || null, round: round, kind: a.x ? "둘 다 싫다" : "잘 모르겠다", note: a.note || "", prompt: it.prompt });
+      });
+    }
+    collectUnsure(bank.ab, ans.ab, 1);
+    collectUnsure(bank.deep && bank.deep.items, ans.deep, 2);
+    Object.keys(ans.tone || {}).forEach(function (k) { var a = ans.tone[k]; if (a.c === "none") unsure.push({ id: k, axis: "tone", round: 1, kind: "모두 별로", note: a.note || "" }); });
+    Object.keys(ans.ox || {}).forEach(function (k) { if (ans.ox[k] === 2) unsure.push({ id: k, axis: "ox", round: 1, kind: "잘 모르겠다", note: "" }); });
+    // 상황별 질문에서 규칙이 나온 축은 이미 풀렸으므로 추가 질문 대상에서 뺀다
+    var solved = deep.filter(function (d) { return d.rules.length; }).map(function (d) { return d.id; });
+    var followAxes = axes.filter(function (a) { return (a.unclear || a.bothBadN) && solved.indexOf(a.id) < 0; }).map(function (a) { return a.id; });
+    var pendingN = unsure.filter(function (u) { return solved.indexOf(u.axis) < 0; }).length;
+
+    var open = [];
+    if (ans.open) Object.keys(ans.open).forEach(function (k) { if (String(ans.open[k]).trim()) open.push({ id: k, text: String(ans.open[k]).trim() }); });
+
+    return {
+      version: bank.version, date: date, overall: overall,
+      reliability: {
+        splitHalf: sb, splitHalfRaw: rHalf, halfPairs: x.length,
+        retestAgree: agree, retestR: rRetest, retestPairs: rx.length,
+        attention: attPass, rightShare: rightShare, posBias: posBias, mildShare: mildShare, fast: fastN,
+        longShare: lp.share, longN: lp.n, longBias: lp.bias, longSide: lp.side, oneSide: oneSide,
+        unsureShare: unsureShare
+      },
+      axes: axes, tone: tone, ox: ox, deep: deep, open: open, unsure: unsure,
+      followup: { axes: followAxes, items: pendingN, recommend: followAxes.length > 0 || pendingN >= 3 },
+      summary: (strong.length ? strong : clear).slice(0, 3).map(function (a) { return a.pole + "(" + a.strength + ")"; }),
+      sayDiff: axes.filter(function (a) { return a.sayDiff; }),
+      unclear: unclear,
+      rules: rules
+    };
+  }
+
+  function compare(r1, r2) {
+    var f1 = [], f2 = [], changed = [];
+    r1.axes.forEach(function (a) {
+      var b = r2.axes.filter(function (z) { return z.id === a.id; })[0]; if (!b) return;
+      f1.push(a.F); f2.push(b.F);
+      if (a.dir !== b.dir) changed.push({ id: a.id, name: a.name, before: a.pole, after: b.pole });
+    });
+    return { r: pearson(f1, f2), changed: changed, same: f1.length - changed.length, total: f1.length };
+  }
+
+  var api = { score: score, compare: compare, needsReserve: needsReserve, poleScore: poleScore, minMs: minMs, sliderScore: sliderScore };
+  if (typeof module !== "undefined" && module.exports) module.exports = api; else root.PrefScore = api;
+})(this);
+
+</script>
+<script>
+"use strict";
+var BANK = {"version":"1.2","title":"AI 대화 선호 진단","slider_points":5,"axes":[{"id":"length","name":"길이","left":"짧게, 핵심만","right":"자세히, 빠짐없이","rule_left":"답은 짧게 쓴다. 핵심을 세 줄 안에서 말하고, 더 필요하면 묻는다.","rule_right":"답은 자세히 쓴다. 이유, 예외, 근거까지 빠짐없이 쓴다.","slider":"AI가 답할 때 길이는 어느 쪽이 좋나요?"},{"id":"order","name":"결론 순서","left":"결론 먼저","right":"과정 먼저","rule_left":"첫 줄에 결론을 쓰고, 이유는 그 뒤에 쓴다.","rule_right":"어떻게 그 결론에 이르렀는지 과정을 먼저 보여 주고 결론으로 맺는다.","slider":"AI가 답할 때 순서는 어느 쪽이 좋나요?"},{"id":"autonomy","name":"묻기와 진행","left":"애매하면 먼저 묻기","right":"알아서 진행","rule_left":"애매한 점이 있으면 진행하기 전에 묻는다.","rule_right":"애매하면 합리적인 쪽을 골라 진행하고, 무엇을 골랐는지 끝에 알린다.","slider":"지시가 애매할 때 AI가 어떻게 하면 좋나요?"},{"id":"format","name":"형식","left":"표·목록으로","right":"이어지는 문장으로","rule_left":"비교와 나열은 표나 목록으로 정리한다.","rule_right":"표와 목록을 줄이고 이어지는 문장으로 쓴다.","slider":"AI가 내용을 정리할 때 어느 쪽이 좋나요?"},{"id":"report","name":"확인 보고","left":"결과만","right":"확인한 과정까지","rule_left":"일을 끝내면 결과만 알린다. 어떻게 확인했는지는 물을 때만 말한다.","rule_right":"일을 끝내면 무엇을 어떻게 확인했는지까지 알린다.","slider":"AI가 일을 끝내고 보고할 때 어느 쪽이 좋나요?"},{"id":"emoji","name":"이모지·감탄","left":"담백하게","right":"이모지·감탄 섞어서","rule_left":"이모지와 느낌표를 쓰지 않는다.","rule_right":"이모지와 가벼운 감탄을 섞어 친근하게 쓴다.","slider":"AI의 글 분위기는 어느 쪽이 좋나요?"},{"id":"hedge","name":"단정 정도","left":"단정적으로","right":"조심스럽게","rule_left":"근거가 있으면 단정해서 쓴다. '~인 것 같다'를 붙이지 않고, 모르는 것만 모른다고 밝힌다.","rule_right":"확신이 없으면 '~로 보입니다', '~일 가능성이 큽니다'처럼 조심스럽게 쓴다.","slider":"AI가 판단을 말할 때 어느 쪽이 좋나요?"},{"id":"explain","name":"설명","left":"방법 위주","right":"왜 그런지까지","rule_left":"물은 것과 바로 쓸 방법 위주로 답한다. 원리나 배경은 물을 때만 설명한다.","rule_right":"답과 함께 왜 그런지 원리와 배경을 짧게 설명한다.","slider":"AI가 답할 때 덧붙이는 말은 어느 쪽이 좋나요?"},{"id":"pushback","name":"의견 내기","left":"시킨 대로","right":"더 나은 방법이 보이면 말하기","rule_left":"시킨 대로 하고, 문제가 클 때만 짧게 알린다.","rule_right":"시킨 대로 하되, 더 나은 방법이 보이면 함께 말한다.","slider":"내 지시를 받았을 때 AI가 어떻게 하면 좋나요?"},{"id":"options","name":"선택지","left":"하나만 추천","right":"여러 안 비교 뒤 추천","rule_left":"고를 일이 있으면 하나만 추천하고 그 이유를 쓴다.","rule_right":"고를 일이 있으면 두세 가지 안의 장단점을 나란히 비교한 뒤 하나를 추천한다.","slider":"고를 일이 있을 때 AI가 어떻게 하면 좋나요?"},{"id":"jargon","name":"용어","left":"쉬운 말로","right":"전문 용어 그대로","rule_left":"전문 용어는 쉬운 말로 풀어 쓴다.","rule_right":"그 분야의 전문 용어를 그대로 쓰고 풀이는 줄인다.","slider":"AI가 쓰는 말은 어느 쪽이 좋나요?"}],"ab":[{"id":"length.1","axis":"length","set":"a1","context":"돈 관리","prompt":"이번 달 카드값이 지난달보다 왜 늘었어?","left":"외식이 세 번 늘어 12만 원이 더 나갔습니다.","right":"지난달보다 18만 원 늘었습니다. 가장 큰 이유는 외식이 세 번 늘어 12만 원이 더 나간 것입니다. 그다음은 출장 교통비 4만 원과 새로 가입한 음악 앱 2만 원입니다. 생활용품과 통신비는 지난달과 같습니다."},{"id":"length.2","axis":"length","set":"a2","context":"컴퓨터","prompt":"엑셀에서 중복된 행 지우는 법 알려줘.","left":"[데이터] 탭에서 [중복된 항목 제거]를 누르고 기준 열을 고르면 됩니다.","right":"[데이터] 탭에서 [중복된 항목 제거]를 누르고 기준 열을 고르면 됩니다. 기준 열을 여러 개 고르면 그 열 값이 모두 같은 행만 지웁니다. 지우기 전에 원본을 다른 시트에 복사해 두면 안전합니다. 첫 줄이 제목이면 [머리글 포함]을 켜 두세요."},{"id":"length.1r","axis":"length","set":"a1r","context":"돈 관리","prompt":"통신비가 이번 달에 왜 올랐어?","left":"데이터 추가 요금 1만 2천 원이 붙었습니다.","right":"지난달보다 1만 5천 원 올랐습니다. 데이터를 다 써서 추가 요금 1만 2천 원이 붙었고, 부가서비스 3천 원이 새로 결제됐습니다. 기본요금과 기기값은 지난달과 같습니다."},{"id":"length.3","axis":"length","set":"a3","context":"일정","prompt":"회의를 언제 하면 좋을까?","left":"화요일 오전 10시가 좋겠습니다. 세 분 모두 비어 있습니다.","right":"화요일 오전 10시가 좋겠습니다. 세 분 모두 비어 있고, 오후에는 김 팀장님 외근이 있습니다. 목요일 오후 2시도 되지만 회의실이 한 곳만 남았습니다. 월요일은 주간회의와 겹쳐 뺐습니다."},{"id":"order.1","axis":"order","set":"a1","context":"계약","prompt":"이 계약서 서명해도 돼?","left":"서명해도 됩니다. 위약금은 계약금의 10%로 보통 수준이고, 해지 통보 기간도 30일로 짧지 않습니다.","right":"위약금은 계약금의 10%로 보통 수준이고, 해지 통보 기간도 30일로 짧지 않습니다. 그래서 서명해도 됩니다."},{"id":"order.2","axis":"order","set":"a2","context":"컴퓨터","prompt":"어제 서버가 왜 멈췄어?","left":"메모리가 부족해서 멈췄습니다. 23시 10분에 메모리 사용률이 100%가 됐고, 바로 뒤 프로그램이 꺼졌습니다.","right":"23시 10분에 메모리 사용률이 100%가 됐고, 바로 뒤 프로그램이 꺼졌습니다. 그래서 메모리가 부족해서 멈췄습니다."},{"id":"order.1r","axis":"order","set":"a1r","context":"집","prompt":"이 전셋집 계약해도 될까?","left":"계약해도 됩니다. 등기부에 근저당이 없고, 전세가율이 60%로 안전한 편입니다.","right":"등기부에 근저당이 없고, 전세가율이 60%로 안전한 편입니다. 그래서 계약해도 됩니다."},{"id":"order.3","axis":"order","set":"a3","context":"문서","prompt":"이 보고서 고칠 데 있어?","left":"두 군데만 고치면 됩니다. 3쪽 표의 합계가 틀렸고, 결론의 날짜가 9월로 적혀 있습니다(10월이 맞음).","right":"3쪽 표의 합계가 틀렸고, 결론의 날짜가 9월로 적혀 있습니다(10월이 맞음). 이 두 군데만 고치면 됩니다."},{"id":"autonomy.1","axis":"autonomy","set":"a1","context":"파일","prompt":"파일 이름을 바꿔 달라고 했는데, 규칙이 두 가지로 읽힐 때 AI의 답","left":"바꾸기 전에 여쭙니다. '날짜_제목'과 '제목_날짜' 중 어느 순서로 할까요?","right":"'날짜_제목' 순서로 모두 바꿨습니다. 반대 순서가 좋으시면 바로 다시 바꾸겠습니다."},{"id":"autonomy.2","axis":"autonomy","set":"a2","context":"문서","prompt":"보고서 초안을 부탁했는데 분량을 정해 주지 않았을 때 AI의 답","left":"몇 쪽으로 쓸까요? 1쪽짜리 요약과 5쪽짜리 상세 중 고르시면 바로 시작하겠습니다.","right":"1쪽 요약으로 먼저 썼습니다. 더 자세한 버전이 필요하면 5쪽으로 늘리겠습니다."},{"id":"autonomy.1r","axis":"autonomy","set":"a1r","context":"일정","prompt":"일정 등록을 부탁했는데 시간이 '오후'로만 적혀 있을 때 AI의 답","left":"몇 시로 등록할까요? 그날 오후에는 2시와 4시가 비어 있습니다.","right":"오후 2시로 등록했습니다. 다른 시간이 좋으시면 바꾸겠습니다."},{"id":"autonomy.3","axis":"autonomy","set":"a3","context":"메일","prompt":"메일 12통 정리를 부탁했는데, 두 폴더 어디에 넣어도 맞을 때 AI의 답","left":"메일 12통을 '거래처'와 '견적' 중 어느 폴더로 옮길까요?","right":"12통을 '견적' 폴더로 옮겼습니다. 다른 폴더가 맞으면 옮기겠습니다."},{"id":"format.1","axis":"format","set":"a1","context":"비교","prompt":"A 요금제와 B 요금제 비교해 줘.","left":"· A: 월 5만 원, 데이터 무제한, 2년 약정\n· B: 월 3만 5천 원, 데이터 10GB, 약정 없음\n→ 데이터를 많이 쓰시면 A, 아니면 B가 낫습니다.","right":"A는 월 5만 원에 데이터가 무제한이고 2년 약정이 있습니다. B는 월 3만 5천 원에 데이터 10GB이고 약정이 없습니다. 데이터를 많이 쓰시면 A, 아니면 B가 낫습니다."},{"id":"format.2","axis":"format","set":"a2","context":"일정","prompt":"이번 주 할 일 정리해 줘.","left":"· 월요일: 견적서 보내기\n· 수요일 14시: 거래처 만나기\n· 금요일까지: 월간 보고서 작성해서 제출하기","right":"월요일에 견적서를 보내고, 수요일 14시에 거래처를 만나고, 금요일까지 월간 보고서를 내면 됩니다."},{"id":"format.1r","axis":"format","set":"a1r","context":"비교","prompt":"두 숙소 비교해 줘.","left":"· 숙소 1: 1박 12만 원, 역에서 걸어서 5분, 조식 있음\n· 숙소 2: 1박 9만 원, 역에서 버스로 15분, 조식 없음\n→ 이동이 많으시면 역에서 가까운 숙소 1이 낫습니다.","right":"숙소 1은 1박 12만 원에 역에서 걸어서 5분이고 조식이 있습니다. 숙소 2는 1박 9만 원에 역에서 버스로 15분이고 조식이 없습니다. 이동이 많으시면 숙소 1이 낫습니다."},{"id":"format.3","axis":"format","set":"a3","context":"회의","prompt":"회의 결과 알려 줘.","left":"· 출시일: 11월 3일로 결정\n· 디자인 시안: 김 팀장님\n· 가격 확정: 이 대리님\n· 다음 회의: 10월 20일","right":"출시일은 11월 3일로 정했습니다. 디자인 시안은 김 팀장님이, 가격 확정은 이 대리님이 맡았고, 다음 회의는 10월 20일입니다."},{"id":"report.1","axis":"report","set":"a1","context":"파일","prompt":"파일 120개 이름 바꾸기를 끝냈을 때 AI의 보고","left":"120개 모두 '날짜_제목' 형식으로 이름을 바꿨습니다. 사진이 84개, 문서가 36개입니다.","right":"120개 모두 이름을 바꿨습니다. 바꾸기 전과 후의 개수가 같고, 겹친 이름이 없는지 확인했습니다."},{"id":"report.2","axis":"report","set":"a2","context":"엑셀","prompt":"엑셀 합계를 고쳐 달라고 했을 때 AI의 보고","left":"합계를 1,240만 원으로 고쳤습니다. 지난달 합계보다 120만 원이 더 늘어난 금액입니다.","right":"합계를 1,240만 원으로 고쳤습니다. 계산기로 다시 더해서 같은 값인지 확인했습니다."},{"id":"report.1r","axis":"report","set":"a1r","context":"메일","prompt":"메일 30통 보내기를 끝냈을 때 AI의 보고","left":"30통 모두 보냈습니다. 거래처 18곳과 협력사 12곳에 각각 한 통씩 나갔습니다.","right":"30통 모두 보냈습니다. 보낸편지함에서 30통을 확인했고, 반송은 없습니다."},{"id":"report.3","axis":"report","set":"a3","context":"일정","prompt":"일정 5개를 등록했을 때 AI의 보고","left":"일정 5개를 모두 등록했습니다. 이번 주에 3개, 다음 주에 2개가 들어갔습니다.","right":"일정 5개를 등록했습니다. 겹치는 일정이 없는지 보고, 들어간 시간을 다시 확인했습니다."},{"id":"emoji.1","axis":"emoji","set":"a1","context":"보고","prompt":"보고서 다 됐어?","left":"네, 다 됐습니다. 파일 첨부합니다.","right":"네, 다 됐습니다! 🎉 파일 첨부합니다."},{"id":"emoji.2","axis":"emoji","set":"a2","context":"날씨","prompt":"내일 비 와?","left":"내일 오후부터 비가 옵니다. 우산을 챙기세요.","right":"내일 오후부터 비가 옵니다 ☔ 우산을 챙기세요!"},{"id":"emoji.1r","axis":"emoji","set":"a1r","context":"보고","prompt":"발표 자료 정리 끝났어?","left":"네, 끝났습니다. 모두 12쪽입니다.","right":"네, 끝났습니다! 👍 모두 12쪽입니다."},{"id":"emoji.3","axis":"emoji","set":"a3","context":"일상","prompt":"점심 뭐 먹지?","left":"근처 칼국숫집이 가깝고 기다리는 줄도 짧습니다.","right":"근처 칼국숫집이 가깝고 기다리는 줄도 짧습니다! 🍜"},{"id":"hedge.1","axis":"hedge","set":"a1","context":"세금","prompt":"이 영수증 사업 경비로 처리돼?","left":"처리됩니다. 거래처와의 식사라서 장부에 접대비 항목으로 넣으면 됩니다.","right":"처리될 듯합니다. 거래처와의 식사라서 장부에 접대비 항목으로 넣으면 될 듯합니다."},{"id":"hedge.2","axis":"hedge","set":"a2","context":"컴퓨터","prompt":"이 코드 어디가 문제야?","left":"12번째 줄 반복문 범위가 하나 깁니다. '\u003c='를 '\u003c'로 바꾸면 그 오류가 사라집니다.","right":"12번째 줄 반복문 범위가 하나 긴 듯합니다. '\u003c='를 '\u003c'로 바꾸면 그 오류가 사라질 듯합니다."},{"id":"hedge.1r","axis":"hedge","set":"a1r","context":"택배","prompt":"이 택배 내일 와?","left":"내일 도착합니다. 오늘 저녁 동네 택배 터미널에 들어왔습니다.","right":"내일 도착할 듯합니다. 오늘 저녁 동네 택배 터미널에 들어온 듯합니다."},{"id":"hedge.3","axis":"hedge","set":"a3","context":"가게","prompt":"오늘 수요일인데, 이 식당 문 열어?","left":"엽니다. 홈페이지 영업시간 안내에 월요일만 쉰다고 적혀 있습니다.","right":"열 듯합니다. 홈페이지 영업시간 안내에 월요일만 쉰다고 적혀 있습니다."},{"id":"explain.1","axis":"explain","set":"a1","context":"컴퓨터","prompt":"엑셀에서 VLOOKUP 대신 뭐 써?","left":"XLOOKUP을 쓰면 됩니다. =XLOOKUP(찾을 값, 찾을 범위, 가져올 범위). 못 찾았을 때 보일 글자는 네 번째 칸에 넣으면 됩니다.","right":"XLOOKUP을 쓰면 됩니다. =XLOOKUP(찾을 값, 찾을 범위, 가져올 범위). 범위를 직접 가리켜서, 중간에 열을 넣어도 결과가 틀어지지 않기 때문입니다."},{"id":"explain.2","axis":"explain","set":"a2","context":"집","prompt":"전세보증보험 들어야 해?","left":"드는 것이 좋습니다. 계약하고 전입신고를 마친 뒤에, 은행 창구나 보증기관 홈페이지에서 바로 신청하면 됩니다.","right":"드는 것이 좋습니다. 집주인이 보증금을 돌려주지 못할 때 보증기관이 대신 돌려주는 보험이기 때문입니다."},{"id":"explain.1r","axis":"explain","set":"a1r","context":"컴퓨터","prompt":"엑셀에 날짜를 넣었는데 숫자로 나와.","left":"셀 서식을 '날짜'로 바꾸면 됩니다. Ctrl+1을 누르면 셀 서식 창이 바로 열려서 거기서 '날짜'를 고르면 됩니다.","right":"셀 서식을 '날짜'로 바꾸면 됩니다. 엑셀은 날짜를 1900년 1월 1일부터 센 숫자로 저장하기 때문입니다."},{"id":"explain.3","axis":"explain","set":"a3","context":"사진","prompt":"사진 파일 용량 줄이는 법 알려줘.","left":"JPG로 저장하면서 품질을 80% 정도로 낮추면 됩니다. 프로그램이 없으면 무료 온라인 압축 도구로도 됩니다.","right":"JPG로 저장하면서 품질을 80% 정도로 낮추면 됩니다. 품질을 조금 낮춰도 눈으로는 차이가 거의 안 보이기 때문입니다."},{"id":"pushback.1","axis":"pushback","set":"a1","context":"문서","prompt":"보고서를 PDF로 바꿔 달라고 했을 때(받는 쪽이 내용을 고쳐야 하는 문서) AI의 답","left":"PDF로 바꿨습니다. 모두 12쪽이고 파일 크기는 1.2MB입니다. 첨부해 두었습니다.","right":"PDF로 바꿨습니다. 다만 받는 쪽이 내용을 고쳐야 한다면 워드 파일이 더 편할 수 있습니다."},{"id":"pushback.2","axis":"pushback","set":"a2","context":"발표","prompt":"발표 자료 글씨를 줄여서 한 쪽에 다 넣어 달라고 했을 때 AI의 답","left":"글씨를 줄여 한 쪽에 다 넣었습니다. 본문은 14포인트에서 10포인트로, 제목은 28포인트에서 20포인트로 줄였습니다.","right":"글씨를 줄여 한 쪽에 다 넣었습니다. 다만 뒷자리에서는 읽기 어려운 크기라 두 쪽으로 나누는 방법도 있습니다."},{"id":"pushback.1r","axis":"pushback","set":"a1r","context":"엑셀","prompt":"엑셀 표를 이미지로 바꿔 달라고 했을 때(나중에 숫자를 고칠 수도 있는 표) AI의 답","left":"표를 이미지로 바꿨습니다. 가로 1,200픽셀 PNG 파일로 바탕 화면의 '표' 폴더에 저장해 두었습니다.","right":"표를 이미지로 바꿨습니다. 다만 나중에 숫자를 고칠 일이 있으면 엑셀 원본도 함께 두시면 좋겠습니다."},{"id":"pushback.3","axis":"pushback","set":"a3","context":"메일","prompt":"메일 제목을 '확인 부탁드립니다'로 해 달라고 했을 때 AI의 답","left":"제목을 '확인 부탁드립니다'로 바꿨습니다. 받는 분은 그대로 세 분이고 첨부도 그대로입니다.","right":"제목을 '확인 부탁드립니다'로 바꿨습니다. 다만 '10월 견적서'처럼 내용을 넣으면 더 눈에 띕니다."},{"id":"options.1","axis":"options","set":"a1","context":"쇼핑","prompt":"문서 작업용 노트북 하나 추천해 줘(100만 원 이하).","left":"가벼운 14인치 모델을 추천합니다. 1.2kg에 배터리가 12시간이라 들고 다니며 문서 작업하기 좋고, 95만 원 선이라 예산 안에 듭니다. 화면도 문서 두 개를 띄우기에 충분합니다.","right":"14인치(1.2kg, 95만 원)는 가볍고, 16인치(1.9kg, 85만 원)는 화면이 크지만 무겁고, 터치형(1.4kg, 99만 원)은 예산 끝에 걸립니다. 그중 14인치를 추천합니다."},{"id":"options.2","axis":"options","set":"a2","context":"나들이","prompt":"주말 가족 나들이 어디 갈까?","left":"가까운 수목원을 추천합니다. 차로 40분이라 오가기 편하고, 그늘진 산책길이 많아 아이와 걷기 좋습니다. 입장료도 어른 3천 원이라 부담이 적습니다.","right":"수목원(40분)은 걷기 좋지만 비에 약하고, 과학관(30분)은 실내라 날씨와 상관없고, 바닷가(1시간)는 멉니다. 수목원을 추천합니다."},{"id":"options.1r","axis":"options","set":"a1r","context":"도구","prompt":"회의록 정리할 도구 하나 골라 줘.","left":"노션을 추천합니다. 여럿이 같이 고치기 쉽고, 무료 요금제로도 회의록 정리에는 충분합니다. 휴대폰에서도 볼 수 있습니다.","right":"노션은 같이 고치기 쉽지만 처음엔 낯설고, 구글 문서는 익숙하지만 정리 기능이 약합니다. 노션을 추천합니다."},{"id":"options.3","axis":"options","set":"a3","context":"휴가","prompt":"휴가 날짜 언제로 할까?","left":"11월 둘째 주를 추천합니다. 그 주에는 마감이 없고, 항공권도 12월보다 30%쯤 쌉니다. 날씨도 여행하기 좋을 때입니다.","right":"11월 둘째 주는 항공권이 싸지만 쉬는 날이 적고, 12월 셋째 주는 비싸지만 사흘 더 쉴 수 있습니다. 11월 둘째 주를 추천합니다."},{"id":"jargon.1","axis":"jargon","set":"a1","context":"사이트","prompt":"우리 사이트 왜 느려?","left":"첫 화면의 큰 사진이 늦게 떠서 화면이 다 보이기까지 3.2초가 걸립니다. 사진을 가벼운 형식으로 바꾸고, 아래쪽 사진은 화면을 내릴 때 불러오면 빨라집니다.","right":"히어로 이미지가 LCP 요소라 LCP가 3.2초입니다. 이미지를 WebP로 바꾸고 below-the-fold 이미지에 lazy loading을 적용하면 LCP가 개선됩니다."},{"id":"jargon.2","axis":"jargon","set":"a2","context":"통계","prompt":"이 설문 결과 믿을 만해?","left":"답한 사람이 30명뿐이라 우연히 나온 결과일 수 있습니다. 더 많은 사람에게 다시 물어서 확인해야 합니다.","right":"n=30이라 검정력이 낮고 95% 신뢰구간이 넓어 우연일 수 있습니다. 표본을 늘려 재검정해야 합니다."},{"id":"jargon.1r","axis":"jargon","set":"a1r","context":"컴퓨터","prompt":"와이파이가 왜 자꾸 끊겨?","left":"옆집 공유기들과 같은 통로를 써서 신호가 서로 부딪칩니다. 공유기 설정 화면에서 아무도 안 쓰는 빈 통로로 바꾸면 끊김이 나아집니다.","right":"2.4GHz 대역에서 인접 AP와 채널 간섭이 생기고 있습니다. 공유기 설정에서 채널을 1·6·11 중 빈 것으로 바꾸면 됩니다."},{"id":"jargon.3","axis":"jargon","set":"a3","context":"계약","prompt":"계약서 위약금 조항 괜찮아?","left":"약속을 어기면 낼 돈이 미리 정해져 있고, 그 금액이 지나치게 크지 않아 줄여 달라고 할 일은 없습니다.","right":"손해배상액의 예정 조항이고, 예정액이 부당히 과다하지 않아 민법 제398조 제2항에 따른 감액 대상이 아닙니다."}],"tone":{"styles":{"formal":"합니다체","polite":"해요체","memo":"메모체","casual":"반말"},"rule":{"formal":"합니다체로 쓴다","polite":"해요체로 쓴다","memo":"'완료', '확인 요청'처럼 짧은 메모체로 쓴다","casual":"친구처럼 반말로 쓴다"},"items":[{"id":"tone.work","set":"t1","context":"업무 보고","prompt":"월간 보고서를 다 썼을 때","options":{"formal":"월간 보고서를 다 썼습니다. 검토 부탁드립니다.","polite":"월간 보고서 다 썼어요. 한번 봐 주세요.","memo":"월간 보고서 완료. 검토 요청.","casual":"월간 보고서 다 썼어. 한번 봐 줘."}},{"id":"tone.chat","set":"t2","context":"가벼운 대화","prompt":"점심 메뉴를 물었을 때","options":{"formal":"오늘은 칼국수를 추천합니다. 날이 쌀쌀합니다.","polite":"오늘은 칼국수 어때요? 날이 쌀쌀하네요.","memo":"추천: 칼국수(쌀쌀한 날씨).","casual":"오늘은 칼국수 어때? 날 쌀쌀하잖아."}},{"id":"tone.error","set":"t3","context":"실수를 알릴 때","prompt":"AI가 날짜를 잘못 적었다고 알릴 때","options":{"formal":"제가 날짜를 잘못 적었습니다. 10월 3일이 맞습니다. 고쳐 두었습니다.","polite":"제가 날짜를 잘못 적었어요. 10월 3일이 맞아요. 고쳐 뒀어요.","memo":"정정: 날짜는 10월 3일(오기). 수정 완료.","casual":"내가 날짜를 잘못 썼어. 10월 3일이 맞아. 고쳐 놨어."}},{"id":"tone.work.r","set":"t1r","context":"업무 보고","prompt":"견적서를 거래처에 보냈을 때","options":{"formal":"견적서를 보냈습니다. 답이 오면 알려 드리겠습니다.","polite":"견적서 보냈어요. 답 오면 알려 드릴게요.","memo":"견적서 발송 완료. 회신 대기.","casual":"견적서 보냈어. 답 오면 알려 줄게."}}]},"ox":[{"id":"ox.praise","text":"답 앞에 '좋은 질문이에요' 같은 말이 붙는다.","rule":"답 앞에 '좋은 질문이에요' 같은 말을 붙이지 않는다."},{"id":"ox.self","text":"'꼼꼼히 확인했습니다', '완벽하게 정리했습니다'처럼 스스로를 칭찬한다.","rule":"'꼼꼼히', '완벽하게'처럼 스스로를 칭찬하는 말을 쓰지 않는다."},{"id":"ox.recap","text":"답 끝에 앞에서 한 말을 다시 요약한다.","rule":"답 끝에서 앞의 내용을 다시 요약하지 않는다."},{"id":"ox.offer","text":"답마다 끝에 '더 도와드릴까요?'를 붙인다.","rule":"답 끝에 '더 도와드릴까요?' 같은 말을 붙이지 않는다."},{"id":"ox.sorry","text":"작은 실수에도 사과를 길게 한다.","rule":"실수는 한 문장으로 인정하고 바로 고친 내용을 말한다."},{"id":"ox.name","text":"답을 매번 내 이름이나 호칭으로 시작한다.","rule":"답을 호칭으로 시작하지 않는다."}],"attention":{"id":"attn","prompt":"이 문항은 집중해서 읽고 있는지 확인하는 문항입니다. 아래 단추 중 '나 · 조금'을 눌러 주세요.","left":"(이 칸은 읽지 않아도 됩니다)","right":"(이 칸도 읽지 않아도 됩니다)","expect":1},"deep":{"note":"심층 설문: 1차에서 애매하게 나온 축만 상황을 나눠 다시 묻는다. 상황마다 고르기 2문항. 한 쌍 안에서 묻는 축 하나만 다르게 쓰고, 길이 축을 뺀 쌍은 글자 수를 15% 안으로 맞춘다.","situations":{"length":[{"id":"chat","name":"가벼운 질문"},{"id":"report","name":"맡긴 일의 결과를 들을 때"},{"id":"learn","name":"처음 해 보는 일을 물을 때"}],"autonomy":[{"id":"small","name":"되돌리기 쉬운 작은 일(파일·폴더·일정)"},{"id":"outside","name":"밖으로 나가는 일(메일 발송·글 올리기)"},{"id":"money","name":"돈이 드는 일(결제·유료 전환)"}],"explain":[{"id":"work","name":"늘 하는 일"},{"id":"new","name":"처음 접하는 일"},{"id":"hurry","name":"급할 때"}],"pushback":[{"id":"taste","name":"취향 문제(글씨체·색)"},{"id":"quality","name":"결과의 질에 영향이 큰 일"},{"id":"cost","name":"손해가 생길 수 있는 일(돈·시간)"}],"options":[{"id":"taste","name":"취향으로 고를 일(선물·식사)"},{"id":"work","name":"일에 영향이 큰 결정(업체·도구)"},{"id":"quick","name":"급하게 정해야 할 때"}]},"items":[{"id":"length@chat.1","axis":"length","sit":"chat","context":"일상","prompt":"내일 몇 시에 해 떠?","left":"내일 해는 6시 32분에 뜹니다.","right":"내일 해는 6시 32분에 뜹니다. 오늘보다 1분 늦고, 해 지는 시간은 18시 1분이라 낮이 11시간 반쯤 됩니다."},{"id":"length@chat.2","axis":"length","sit":"chat","context":"날씨","prompt":"이번 주말 날씨 어때?","left":"토요일은 맑고, 일요일은 오후에 비가 옵니다.","right":"토요일은 맑고 낮 최고 24도입니다. 일요일은 오후 3시쯤부터 비가 오고 기온이 5도쯤 내려갑니다. 바람은 이틀 다 약합니다."},{"id":"length@report.1","axis":"length","sit":"report","context":"업무","prompt":"협력사 세 곳 견적을 받아 정리해 달라고 했을 때 AI의 보고","left":"세 곳 견적을 받았습니다. 가장 싼 곳은 B사 420만 원입니다.","right":"세 곳 견적을 받았습니다. 가장 싼 곳은 B사 420만 원입니다. A사는 480만 원에 설치비가 따로 들고, C사는 450만 원에 2년 무상 수리가 붙습니다. 납기는 셋 다 2주입니다."},{"id":"length@report.2","axis":"length","sit":"report","context":"업무","prompt":"지난달 매출을 정리해 달라고 했을 때 AI의 보고","left":"지난달 매출은 3,240만 원으로 전달보다 8% 늘었습니다.","right":"지난달 매출은 3,240만 원으로 전달보다 8% 늘었습니다. 온라인이 2,100만 원으로 12% 늘었고, 매장은 1,140만 원으로 1% 줄었습니다. 반품은 23건으로 비슷합니다."},{"id":"length@learn.1","axis":"length","sit":"learn","context":"돈 관리","prompt":"주식 계좌 처음 만드는데 어떻게 해?","left":"증권사 앱을 깔고 '비대면 계좌 개설'을 누르면 신분증 촬영과 본인 확인으로 10분 안에 만들 수 있습니다.","right":"증권사 앱을 깔고 '비대면 계좌 개설'을 누르면 신분증 촬영과 본인 확인으로 10분 안에 만들 수 있습니다. 본인 명의 은행 계좌가 하나 있어야 합니다. 만든 뒤에는 은행 계좌에서 돈을 옮겨 넣어야 주식을 살 수 있습니다."},{"id":"length@learn.2","axis":"length","sit":"learn","context":"세금","prompt":"연말정산 처음인데 뭐 해야 돼?","left":"회사가 알려 주는 날까지 홈택스에서 '간소화 자료'를 내려받아 회사에 내면 됩니다.","right":"회사가 알려 주는 날까지 홈택스에서 '간소화 자료'를 내려받아 회사에 내면 됩니다. 월세, 안경값처럼 간소화 자료에 안 나오는 것은 영수증을 따로 챙겨야 합니다. 부양가족이 있으면 그 사람의 자료 제공 동의도 미리 받아 둡니다."},{"id":"autonomy@small.1","axis":"autonomy","sit":"small","context":"사진","prompt":"사진 40장을 날짜별 폴더로 정리해 달라고 했는데, 날짜가 없는 사진이 3장 있을 때 AI의 답","left":"날짜가 없는 사진 3장은 어디에 둘까요? '날짜 모름' 폴더를 새로 만들어 넣을까요?","right":"날짜가 없는 3장은 '날짜 모름' 폴더를 새로 만들어 넣었습니다. 다른 곳이 좋으면 옮기겠습니다."},{"id":"autonomy@small.2","axis":"autonomy","sit":"small","context":"일정","prompt":"회의를 '다음 주 중'으로만 잡아 달라고 했을 때 AI의 답","left":"다음 주 언제로 잡을까요? 지금은 화요일 오전과 목요일 오후가 모두 비어 있습니다.","right":"다음 주 화요일 오전 10시로 잡았습니다. 다른 날이 좋으시면 바꾸겠습니다."},{"id":"autonomy@outside.1","axis":"autonomy","sit":"outside","context":"메일","prompt":"거래처 열두 곳에 보낼 안내 메일을 써 달라고 했을 때(보낼지는 말하지 않음) AI의 답","left":"메일 12통을 써 두었습니다. 보내기 전에 한번 보시고, 보내도 되면 말씀해 주세요.","right":"메일 12통을 써서 모두 보냈습니다. 보낸편지함에서 보낸 내용을 다시 보실 수 있습니다."},{"id":"autonomy@outside.2","axis":"autonomy","sit":"outside","context":"글","prompt":"블로그 글을 다듬어 달라고 했을 때(올릴지는 말하지 않음) AI의 답","left":"글을 다 다듬었습니다. 올리기 전에 한번 읽어 보시고, 괜찮으면 올려도 된다고 말씀해 주세요.","right":"글을 다 다듬어서 블로그에 올렸습니다. 올린 글 주소를 보내 드리니 읽어 보세요."},{"id":"autonomy@money.1","axis":"autonomy","sit":"money","context":"구독","prompt":"사진 저장 공간을 늘려 달라고 했을 때(요금제는 말하지 않음) AI의 답","left":"월 2,900원 요금제로 늘리면 됩니다. 지금 바꿔 드릴까요?","right":"월 2,900원 요금제로 바꿨습니다. 다음 달 카드값부터 청구됩니다."},{"id":"autonomy@money.2","axis":"autonomy","sit":"money","context":"택배","prompt":"택배를 보내 달라고 했는데, 빠른 배송이 3천 원 더 비쌀 때 AI의 답","left":"일반은 3일, 빠른 배송은 3천 원 더 들고 내일 옵니다. 어느 쪽으로 할까요?","right":"빠른 배송으로 보냈습니다. 3천 원이 더 들었고 내일 오전에 도착합니다."},{"id":"explain@work.1","axis":"explain","sit":"work","context":"업무","prompt":"견적서 부가세 다시 계산해 줘.","left":"공급가 500만 원이면 부가세 50만 원, 합계 550만 원입니다. 견적서의 부가세와 합계 칸만 고치면 됩니다.","right":"공급가 500만 원이면 부가세 50만 원, 합계 550만 원입니다. 부가세는 공급가의 10%로 정해져 있기 때문입니다."},{"id":"explain@work.2","axis":"explain","sit":"work","context":"업무","prompt":"출장비 정산 양식에 뭘 적어?","left":"날짜, 출발지와 도착지, 교통비 금액을 적고 영수증 사진을 붙이면 됩니다. 양식은 회계팀 공유 폴더 안의 '출장비' 폴더에 엑셀로 있습니다.","right":"날짜, 출발지와 도착지, 교통비 금액을 적고 영수증 사진을 붙이면 됩니다. 회계팀이 실제로 다녀왔는지 확인하는 데 쓰기 때문입니다."},{"id":"explain@new.1","axis":"explain","sit":"new","context":"돈 관리","prompt":"ETF가 뭐야?","left":"주식처럼 사고파는 펀드입니다. 증권사 앱에서 ETF 이름을 검색해 주식처럼 한 주씩 사면 됩니다.","right":"주식처럼 사고파는 펀드입니다. 여러 종목을 한꺼번에 담고 있어서 한 회사가 망하더라도 피해가 작습니다."},{"id":"explain@new.2","axis":"explain","sit":"new","context":"컴퓨터","prompt":"공유기 설정에서 DNS 바꾸라는데 그게 뭐야?","left":"주소를 숫자로 바꿔 주는 서버입니다. 공유기 설정의 인터넷 메뉴에서 DNS 칸에 8.8.8.8을 넣고 저장하면 됩니다.","right":"주소를 숫자로 바꿔 주는 서버입니다. 이 서버가 느리면 사이트가 늦게 열려서, 빠른 곳으로 바꾸라는 뜻입니다."},{"id":"explain@hurry.1","axis":"explain","sit":"hurry","context":"회의","prompt":"5분 뒤 발표인데 화면 공유가 안 돼.","left":"회의 프로그램을 껐다 켜세요. 그래도 안 되면 공유할 때 창 대신 '전체 화면'을 고르면 됩니다.","right":"회의 프로그램을 껐다 켜세요. 화면 공유 권한을 새로 받으려면 프로그램을 다시 켜야 하기 때문입니다."},{"id":"explain@hurry.2","axis":"explain","sit":"hurry","context":"컴퓨터","prompt":"엑셀이 멈췄어, 저장 안 했는데.","left":"엑셀을 다시 켜면 왼쪽에 '복구된 파일'이 뜹니다. 그 파일을 열어서 다른 이름으로 바로 저장해 두세요.","right":"엑셀을 다시 켜면 왼쪽에 '복구된 파일'이 뜹니다. 엑셀이 몇 분마다 임시 저장을 하기 때문입니다."},{"id":"pushback@taste.1","axis":"pushback","sit":"taste","context":"발표","prompt":"발표 자료 글씨체를 궁서체로 바꿔 달라고 했을 때 AI의 답","left":"글씨체를 궁서체로 바꿨습니다. 제목과 본문을 다 바꿨고 전체 12쪽입니다.","right":"글씨체를 궁서체로 바꿨습니다. 다만 화면에서는 고딕체가 더 또렷하게 읽힙니다."},{"id":"pushback@taste.2","axis":"pushback","sit":"taste","context":"초대장","prompt":"초대장 바탕을 빨간색으로 해 달라고 했을 때 AI의 답","left":"초대장 바탕을 빨간색으로 바꿨습니다. 글씨는 흰색이고, 글자 크기와 배치는 그대로입니다.","right":"초대장 바탕을 빨간색으로 바꿨습니다. 다만 빨간색은 경고처럼 보일 수도 있습니다."},{"id":"pushback@quality.1","axis":"pushback","sit":"quality","context":"설문","prompt":"설문 문항을 모두 '예/아니오'로만 만들어 달라고 했을 때 AI의 답","left":"문항 10개를 모두 '예/아니오'로 만들었습니다. 번호를 붙였고 한 장에 다 들어갑니다.","right":"문항 10개를 '예/아니오'로 만들었습니다. 다만 5점 척도면 만족 정도까지 알 수 있습니다."},{"id":"pushback@quality.2","axis":"pushback","sit":"quality","context":"보고서","prompt":"보고서에서 그래프를 다 빼 달라고 했을 때 AI의 답","left":"그래프 6개를 모두 뺐습니다. 그래서 보고서 분량이 20쪽에서 16쪽으로 4쪽이 줄었습니다.","right":"그래프 6개를 모두 뺐습니다. 다만 매출 추이 그래프 하나는 남기면 흐름이 잘 보입니다."},{"id":"pushback@cost.1","axis":"pushback","sit":"cost","context":"여행","prompt":"항공권을 장바구니에 담아 달라고 했을 때(이틀 뒤 같은 표가 10% 할인될 예정) AI의 답","left":"항공권을 장바구니에 담았습니다. 왕복 38만 원이고 좌석은 창가로 골라 두었습니다.","right":"항공권을 장바구니에 담았습니다. 다만 이틀 뒤부터 같은 표가 10% 할인될 예정입니다."},{"id":"pushback@cost.2","axis":"pushback","sit":"cost","context":"일정","prompt":"회의 초대장을 금요일 오후 6시로 만들어 달라고 했을 때(참석자 두 명이 그 시간에 다른 일정이 있음, 아직 보내지 않음) AI의 답","left":"금요일 오후 6시 회의 초대장을 만들어 두었습니다. 장소는 3층 큰 회의실이고, 회의 시간은 한 시간으로 잡아 두었습니다.","right":"금요일 오후 6시 회의 초대장을 만들어 두었습니다. 다만 두 분이 그 시간에 일정이 있어 목요일 오후가 더 낫습니다."},{"id":"options@taste.1","axis":"options","sit":"taste","context":"선물","prompt":"친구 생일 선물 뭐 할까?(5만 원 안쪽)","left":"향이 좋은 핸드크림 세트를 추천합니다. 받는 사람 취향을 덜 타고, 4만 원 선이라 예산에 맞습니다. 선물 포장도 됩니다.","right":"핸드크림 세트(4만 원)는 무난하고, 와인(5만 원)은 술을 좋아하면 좋고, 꽃다발은 오래 못 갑니다. 핸드크림을 추천합니다."},{"id":"options@taste.2","axis":"options","sit":"taste","context":"식사","prompt":"오늘 저녁 뭐 먹을까?","left":"근처 순댓국집을 추천합니다. 줄이 짧고, 쌀쌀한 날 따뜻하게 먹기 좋고 값도 9천 원으로 싼 편입니다.","right":"순댓국은 따뜻하고, 초밥은 가볍지만 비싸고, 피자는 배달이 빠릅니다. 순댓국을 추천합니다."},{"id":"options@work.1","axis":"options","sit":"work","context":"업무","prompt":"사무실 복합기 업체 정해 줘.","left":"B사를 추천합니다. 월 대여료가 가장 싸고, 고장 나면 하루 안에 기사가 와서 고쳐 줍니다.","right":"A사는 비싸지만 빠르고, B사는 싸고 수리가 하루 안이고, C사는 3년 약정입니다. B사를 추천합니다."},{"id":"options@work.2","axis":"options","sit":"work","context":"업무","prompt":"새 프로젝트 관리 도구 정해 줘.","left":"지금 쓰는 구글 시트를 계속 쓰시길 추천합니다. 팀이 이미 익숙하고, 열 명 정도 규모의 팀에서는 기능도 충분합니다.","right":"구글 시트는 익숙하지만 알림이 없고, 노션은 좋지만 배워야 하고, 지라는 무겁습니다. 구글 시트를 추천합니다."},{"id":"options@quick.1","axis":"options","sit":"quick","context":"회의","prompt":"10분 뒤 회의인데 발표 순서 어떻게 할까?","left":"매출, 비용, 다음 달 계획 순서로 하시길 추천합니다. 좋은 소식으로 시작해서 계획으로 맺을 수 있습니다.","right":"매출부터 하면 분위기가 좋고, 비용부터면 문제가 먼저 보이고, 계획부터면 짧게 끝납니다. 매출부터 하시길 추천합니다."},{"id":"options@quick.2","axis":"options","sit":"quick","context":"이동","prompt":"약속이 30분 뒤인데 택시 탈까, 지하철 탈까?","left":"지하철을 추천합니다. 지금은 퇴근길이 막혀서 택시보다 10분쯤 빠르고 요금도 1,500원으로 훨씬 적게 듭니다.","right":"택시는 40분에 1만 8천 원, 지하철은 30분에 1,500원, 버스는 45분입니다. 지하철을 추천합니다."}],"open":{"axis":"{name}: 어떤 때는 '{left}' 쪽이 좋고, 어떤 때는 '{right}' 쪽이 좋은가요? 떠오르는 상황을 한두 줄로 적어 주세요.","general":[{"id":"open.worst","text":"AI 답을 보다가 가장 거슬렸던 순간을 하나 적어 주세요."},{"id":"open.wish","text":"AI가 이것 하나만 지켜 주면 좋겠다는 것을 적어 주세요."}],"max":300}},"id":"default-1.2"};
+var PRIOR = null;   // 추가 질문 설문이면 1차 답이 들어 있다
+var DEEP = BANK.deep;
+var FU = DEEP.followup || null;
+var KEY = "prefsurvey-" + (BANK.id || BANK.version) + (PRIOR ? "-r" + (FU.round || 2) : "");
+var STYLES = BANK.tone.styles;
+var PTS = BANK.slider_points || 5;
+var app = document.getElementById("app");
+var state;
+
+function store(){ if (state && state.demo) return; try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+function load(){ try{ var s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; }catch(e){ return null; } }
+function clearStore(){ try{ localStorage.removeItem(KEY); }catch(e){} }
+function shuffle(a){ a = a.slice(); for (var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+function byId(list, id){ for (var i=0;i<list.length;i++) if (list[i].id===id) return list[i]; return null; }
+function now(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+function rside(){ return Math.random() < 0.5 ? 0 : 1; }
+
+function newState(){
+  var sides = {};
+  BANK.axes.forEach(function(ax){
+    var s1 = rside();
+    BANK.ab.forEach(function(it){
+      if (it.axis !== ax.id) return;
+      sides[it.id] = it.set === "a1" ? s1 : it.set === "a1r" ? 1 - s1 : rside();
+    });
+  });
+  function ab(set){ return BANK.ab.filter(function(i){ return i.set===set; }).map(function(i){ return {k:"ab", id:i.id}; }); }
+  function tone(set){ return BANK.tone.items.filter(function(i){ return i.set===set; }).map(function(i){ return {k:"tone", id:i.id}; }); }
+  var queue = []
+    .concat(shuffle(ab("a1").concat(tone("t1"))))
+    .concat(shuffle(ab("a2").concat(tone("t2")).concat([{k:"att", id:"attn"}])))
+    .concat(shuffle(ab("a1r").concat(tone("t3")).concat(tone("t1r"))));
+  var toneOrder = {};
+  BANK.tone.items.forEach(function(it){ toneOrder[it.id] = shuffle(Object.keys(it.options)); });
+  return { v: BANK.version, started: new Date().toISOString(), sides: sides, queue: queue, pos: 0, phase: 1,
+           toneOrder: toneOrder, ans: { v: BANK.version, b: BANK.id, d: "", ab: {}, tone: {}, ox: {}, sl: {}, deep: {}, open: {} } };
+}
+
+// 추가 질문 설문: 1차 답을 이어받아, AI가 짠 followup 문항(상황별 고르기 + 주관식)만 묻는다
+function followupState(){
+  var ans = JSON.parse(JSON.stringify(PRIOR));
+  ans.deep = ans.deep || {}; ans.open = ans.open || {}; ans.round = FU.round || 2; ans.d = "";
+  var st = { v: BANK.version, started: new Date().toISOString(), sides: {}, queue: [], pos: 0, phase: 3, followup: true,
+             toneOrder: {}, deepSides: {}, deepStart: 0, ans: ans };
+  var q = (FU.ask || []).map(function(id){ st.deepSides[id] = rside(); return {k:"deep", id:id}; });
+  st.queue = shuffle(q).concat((FU.open || []).map(function(o){ return {k:"open", id:o.id}; }));
+  return st;
+}
+
+// 3부가 끝나면 엇갈린 축에 확인 문항을 넣고, 그 뒤에 싫은 것·직접 답하기를 붙인다
+function extendQueue(){
+  if (state.phase === 1 && state.pos >= state.queue.length){
+    var extra = [];
+    BANK.axes.forEach(function(ax){
+      if (PrefScore.needsReserve(BANK, state.ans, ax.id)){
+        BANK.ab.forEach(function(it){ if (it.axis===ax.id && it.set==="a3") extra.push({k:"ab", id:it.id}); });
+      }
+    });
+    state.reserve = extra.map(function(e){ return e.id; });
+    state.queue = state.queue.concat(shuffle(extra))
+      .concat(shuffle(BANK.ox.map(function(o){ return {k:"ox", id:o.id}; })))
+      .concat(shuffle(BANK.axes.map(function(a){ return {k:"sl", id:a.id}; })));
+    state.phase = 2;
+    store();
+  }
+}
+
+// 심층 설문: 애매한 축(또는 고른 축)만 상황별로 묻고, 주관식을 붙인다
+function startDeep(all){
+  var res = PrefScore.score(BANK, state.ans);
+  var unclear = res.unclear.map(function(a){ return a.id; });
+  var deepAxes = Object.keys(DEEP.situations).filter(function(id){ return all || unclear.indexOf(id) >= 0; });
+  var q = [];
+  state.deepSides = state.deepSides || {};
+  var fuAsk = FU && FU.ask || [];
+  DEEP.items.forEach(function(it){
+    if (deepAxes.indexOf(it.axis) < 0 || fuAsk.indexOf(it.id) >= 0) return;   // 추가 질문용 문항은 추가 설문에서만 묻는다
+    state.deepSides[it.id] = rside();
+    q.push({k:"deep", id:it.id});
+  });
+  q = shuffle(q);
+  var openAxes = all ? unclear.concat(deepAxes.filter(function(id){ return unclear.indexOf(id) < 0; })) : unclear;
+  openAxes.forEach(function(id){ q.push({k:"open", id:"open."+id, axis:id}); });
+  DEEP.open.general.forEach(function(g){ q.push({k:"open", id:g.id}); });
+  state.queue = state.queue.concat(q);
+  state.phase = 3; state.deepAxes = deepAxes; state.deepStart = state.pos;
+  store(); render();
+}
+
+function estTotal(){ return state.phase === 1 ? state.queue.length + 2 + BANK.ox.length + BANK.axes.length : state.queue.length; }
+function partOf(step){
+  return { ox: "싫은 것 고르기", sl: "직접 답하기", deep: "상황별 질문", open: "직접 적기" }[step.k] || "둘 중 고르기";
+}
+function header(step){
+  var base = state.phase === 3 ? state.deepStart : 0;
+  var done = state.pos - base, total = estTotal() - base;
+  return '<div class="top">'+(done > 0 && !state.noteFor ? '<button class="btn" data-back="1" style="min-height:36px;padding:0 10px;font-size:13px">이전</button>' : '')+
+         '<div class="bar" aria-hidden="true"><i style="width:'+Math.round(100*done/total)+'%"></i></div>'+
+         '<span class="count">'+(done+1)+' / '+(state.phase===2||state.phase===3?'':'약 ')+total+'</span></div>'+
+         '<div class="part">'+partOf(step)+'</div>';
+}
+
+var shownAt = 0;
+function render(){
+  extendQueue();
+  if (state.pos >= state.queue.length) return finish();
+  var step = state.queue[state.pos];
+  shownAt = now();
+  var h = header(step);
+  if (state.noteFor === step.id) h += renderNote(step);
+  else if (step.k === "ab" || step.k === "att" || step.k === "deep") h += renderAB(step);
+  else if (step.k === "tone") h += renderTone(step);
+  else if (step.k === "ox") h += renderOX(step);
+  else if (step.k === "sl") h += renderSlider(step);
+  else if (step.k === "open") h += renderOpen(step);
+  app.innerHTML = h;
+  window.scrollTo(0,0);
+}
+
+function renderAB(step){
+  var it, side, chip;
+  if (step.k === "att"){ it = BANK.attention; side = 0; chip = "확인"; }
+  else if (step.k === "deep"){ it = byId(DEEP.items, step.id); side = state.deepSides[it.id]; chip = sitName(it) ; }
+  else { it = byId(BANK.ab, step.id); side = state.sides[it.id]; chip = esc(it.context); }
+  var ga = side === 0 ? it.left : it.right, na = side === 0 ? it.right : it.left;
+  var lead = (/AI의 (답|보고)$/.test(it.prompt) || step.k === "att") ? "" : "질문: ";
+  var btns = [[-2,"가","확실히"],[-1,"가","조금"],[1,"나","조금"],[2,"나","확실히"]].map(function(b){
+    return '<button class="btn" data-r="'+b[0]+'">'+b[1]+'<small>'+b[2]+'</small></button>';
+  }).join("");
+  return '<div class="card"><span class="chip">'+chip+'</span><div class="prompt">'+lead+esc(it.prompt)+'</div>'+
+    '<div class="opts two"><div class="opt"><b>가</b><br>'+esc(ga)+'</div><div class="opt"><b>나</b><br>'+esc(na)+'</div></div>'+
+    '<p class="muted">더 마음에 드는 답은?</p><div class="scale" role="group" aria-label="고르기">'+btns+'</div>'+
+    (step.k === "att" ? '' : '<div class="skip"><button class="btn" data-u="1">잘 모르겠다</button><button class="btn" data-x="1">둘 다 싫다</button></div>')+
+    '</div>';
+}
+
+// '둘 다 싫다'·'모두 별로'를 누르면 같은 문항에서 고칠 말을 받는다
+function renderNote(step){
+  var it = step.k === "tone" ? byId(BANK.tone.items, step.id) : step.k === "deep" ? byId(DEEP.items, step.id) : byId(BANK.ab, step.id);
+  var shown = step.k === "tone" ? state.toneOrder[it.id].map(function(c, i){ return '<div class="opt"><b>'+(i+1)+'</b><br>'+esc(it.options[c])+'</div>'; }).join("")
+    : (function(){ var s = step.k === "deep" ? state.deepSides[it.id] : state.sides[it.id];
+        return '<div class="opt"><b>가</b><br>'+esc(s === 0 ? it.left : it.right)+'</div><div class="opt"><b>나</b><br>'+esc(s === 0 ? it.right : it.left)+'</div>'; })();
+  return '<div class="card"><span class="chip">'+(step.k === "tone" ? "말투" : "둘 다 싫다")+'</span><div class="prompt">'+esc(it.prompt)+'</div>'+
+    '<div class="opts'+(step.k === "tone" ? '' : ' two')+'">'+shown+'</div>'+
+    '<p><b>이 답을 어떻게 고치면 좋을까요?</b></p>'+
+    '<textarea class="free" id="free" maxlength="'+DEEP.open.max+'" placeholder="예: 숫자만 한 줄로, 인사말 빼고"></textarea>'+
+    '<p class="muted">한두 줄이면 됩니다. AI가 읽고 지침이나 추가 질문을 만들 때 씁니다.</p>'+
+    '<div class="actions"><button class="btn primary" data-note="save">다음</button><button class="btn" data-note="skip">적지 않고 넘어가기</button><button class="btn" data-note="back">다시 고르기</button></div></div>';
+}
+function sitName(it){
+  var s = byId(DEEP.situations[it.axis], it.sit);
+  return esc(s ? s.name : it.context);
+}
+
+function renderTone(step){
+  var it = byId(BANK.tone.items, step.id);
+  var cards = state.toneOrder[it.id].map(function(c, i){
+    return '<button class="opt" data-c="'+c+'"><b>'+(i+1)+'</b><br>'+esc(it.options[c])+'</button>';
+  }).join("");
+  return '<div class="card"><span class="chip">말투 · '+esc(it.context)+'</span>'+
+    '<div class="prompt">상황: '+esc(it.prompt)+'</div><p class="muted">AI가 이렇게 알린다면, 가장 마음에 드는 말투는?</p>'+
+    '<div class="opts">'+cards+'</div><div class="skip"><button class="btn" data-x="1">모두 별로</button></div></div>';
+}
+
+function renderOX(step){
+  var o = byId(BANK.ox, step.id);
+  return '<div class="card"><span class="chip">AI가 이렇게 하면</span><div class="prompt">'+esc(o.text)+'</div>'+
+    '<div class="ox"><button class="btn" data-ox="1">거슬린다</button><button class="btn" data-ox="0">괜찮다</button><button class="btn" data-ox="2">잘 모르겠다</button></div></div>';
+}
+
+function renderSlider(step){
+  var ax = byId(BANK.axes, step.id), mid = (PTS + 1) / 2, dots = "";
+  for (var v = 1; v <= PTS; v++) dots += '<button class="btn" data-sl="'+v+'" aria-label="'+v+'점">'+(v===mid?"·":"")+'</button>';
+  return '<div class="card"><span class="chip">'+esc(ax.name)+'</span>'+
+    '<div class="prompt">'+esc(ax.slider)+'</div>'+
+    '<div class="poles"><span>'+esc(ax.left)+'</span><span>'+esc(ax.right)+'</span></div>'+
+    '<div class="likert">'+dots+'</div><p class="muted" style="text-align:center">가운데는 "상관없음"</p></div>';
+}
+
+function openPrompt(step){
+  if (step.axis){
+    var ax = byId(BANK.axes, step.axis);
+    return DEEP.open.axis.replace("{name}", ax.name).replace("{left}", ax.left).replace("{right}", ax.right);
+  }
+  var g = byId(DEEP.open.general, step.id) || (FU && byId(FU.open || [], step.id));
+  return g ? g.text : step.id;
+}
+function renderOpen(step){
+  var prev = state.ans.open[step.id] || "";
+  var chip = step.axis ? esc(byId(BANK.axes, step.axis).name) : /^f\./.test(step.id) ? "추가 질문" : "마지막 질문";
+  return '<div class="card"><span class="chip">'+chip+'</span><div class="prompt">'+esc(openPrompt(step))+'</div>'+
+    '<textarea class="free" id="free" maxlength="'+DEEP.open.max+'" placeholder="한두 줄이면 충분합니다">'+esc(prev)+'</textarea>'+
+    '<p class="muted">'+DEEP.open.max+'자까지. 적을 게 없으면 건너뛰세요.</p>'+
+    '<div class="actions"><button class="btn primary" data-open="save">다음</button><button class="btn" data-open="skip">건너뛰기</button></div></div>';
+}
+
+app.addEventListener("click", function(e){
+  var b = e.target.closest("button"); if (!b) return;
+  if (b.id === "start"){ state = PRIOR ? followupState() : newState(); store(); return render(); }
+  if (b.dataset.back){ state.pos--; store(); return render(); }   // 한 문항 되돌아가 다시 고른다(새 답이 덮어쓴다)
+  if (b.dataset.fu){ state.ans.fu = b.dataset.fu; store(); finish(); var fu = document.getElementById("fu"); if (fu) fu.scrollIntoView(); return; }
+  if (b.id === "resume"){ return render(); }
+  if (b.id === "restart"){ clearStore(); state = null; return intro(); }
+  if (b.id === "deep-some"){ return startDeep(false); }
+  if (b.id === "deep-all"){ return startDeep(true); }
+  if (b.dataset.copy){ return copy(b.dataset.copy, b); }
+  if (b.id === "dl-json"){ return download("선호진단_답.json", JSON.stringify(state.ans, null, 1), "application/json"); }
+  if (b.id === "dl-html"){ return saveReport(); }
+  if (!state || state.pos >= state.queue.length) return;
+  var step = state.queue[state.pos], t = Math.round(now() - shownAt);
+  if (t < 400) return;   // 같은 단추를 빠르게 두 번 눌러 다음 문항까지 넘어가는 것을 막는다
+  var side = step.k === "deep" ? state.deepSides[step.id] : state.sides[step.id];
+  var put = function(a){ if (step.k === "deep") state.ans.deep[step.id] = a; else state.ans.ab[step.id] = a; };
+  if (b.dataset.r){
+    var r = parseInt(b.dataset.r, 10);
+    if (step.k === "att") state.ans.att = { s: 0, r: r, t: t };
+    else put({ s: side, r: r, t: t });
+  } else if (b.dataset.u){ put({ s: side, r: 0, u: 1, t: t });   // 잘 모르겠다: 축 점수에 넣지 않는다
+  } else if (b.dataset.x){ state.noteFor = step.id; state.noteT = t; store(); return render();
+  } else if (b.dataset.note){
+    if (b.dataset.note === "back"){ delete state.noteFor; store(); return render(); }
+    var note = b.dataset.note === "save" ? document.getElementById("free").value.trim().slice(0, DEEP.open.max) : "";
+    if (step.k === "tone") state.ans.tone[step.id] = { c: "none", note: note, t: state.noteT };
+    else put({ s: side, r: 0, x: 1, note: note, t: state.noteT });   // 둘 다 싫다: 점수에 넣지 않고 고칠 말만 남긴다
+    delete state.noteFor; delete state.noteT;
+  } else if (b.dataset.c){ state.ans.tone[step.id] = { c: b.dataset.c, t: t };
+  } else if (b.dataset.ox){ state.ans.ox[step.id] = parseInt(b.dataset.ox, 10);
+  } else if (b.dataset.sl){ state.ans.sl[step.id] = parseInt(b.dataset.sl, 10);
+  } else if (b.dataset.open){
+    var txt = b.dataset.open === "save" ? document.getElementById("free").value.trim().slice(0, DEEP.open.max) : "";
+    if (txt) state.ans.open[step.id] = txt; else delete state.ans.open[step.id];
+  } else return;
+  state.pos++; store(); render();
+});
+
+function intro(){
+  var saved = load();
+  var resume = saved && !saved.done && saved.pos < saved.queue.length;
+  var doneBefore = saved && saved.done && !resume;
+  var n = FU ? (FU.ask || []).length + (FU.open || []).length : 0;
+  app.innerHTML =
+    (PRIOR ? '<h1>추가 질문</h1>'+
+    '<div class="card"><ul class="plain">'+
+    '<li>지난번 답을 이어받았습니다. 애매하게 나왔거나 "잘 모르겠다·둘 다 싫다"로 넘긴 부분만 '+n+'문항 더 묻습니다.</li>'+
+    '<li>상황을 나눠 물으니, 그 상황이라면 어느 쪽이 나은지만 고르세요.</li>'+
+    '<li>끝나면 지난 답과 합친 결과가 나옵니다. 답은 이 브라우저에만 저장됩니다.</li></ul>'
+    : '<h1>AI 대화 선호 진단</h1>'+
+    '<div class="card"><ul class="plain">'+
+    '<li>같은 내용을 두 가지로 쓴 답을 보여 드립니다. 더 마음에 드는 쪽을 고르세요.</li>'+
+    '<li>정답은 없습니다. 오래 고민하지 말고 읽은 대로 고르세요.</li>'+
+    '<li>고르기 어려우면 "잘 모르겠다"를, 둘 다 마음에 안 들면 "둘 다 싫다"를 누르고 어떻게 고치면 좋을지 적어 주세요.</li>'+
+    '<li>약 55문항, 15분쯤 걸립니다. 끝나면 애매하게 나온 부분을 AI가 추가 질문으로 더 물을 수 있습니다.</li>'+
+    '<li>같은 질문이 모양을 바꿔 다시 나옵니다. 답이 얼마나 한결같은지 보는 장치입니다.</li>'+
+    '<li>창을 닫아도 이어서 할 수 있습니다. 답은 이 브라우저에만 저장되고 어디로도 보내지 않습니다.</li></ul>')+
+    (resume ? '<div class="actions"><button class="btn primary" id="resume">이어서 하기</button><button class="btn" id="start">처음부터</button></div>'
+            : doneBefore ? '<div class="actions"><button class="btn primary" id="resume">지난 결과 보기</button><button class="btn" id="start">다시 하기</button></div>'
+            : '<button class="btn primary full" id="start">시작하기</button>')+
+    '</div>';
+  if (resume || doneBefore) state = saved;
+}
+
+/* ---------- 결과 ---------- */
+function gradeClass(g){ return g==="높음"||g==="믿을 만함" ? "g-high" : g==="낮음"||g==="참고용" ? "g-low" : "g-mid"; }
+function pct(x){ return x===null||x===undefined ? "-" : Math.round(x*100)+"%"; }
+function num(x){ return x===null||x===undefined ? "-" : x.toFixed(2); }
+
+function profileRows(axes){
+  var P = function(v){ return ((Math.max(-1, Math.min(1, v)) + 1) / 2 * 100).toFixed(1) + "%"; };
+  return axes.map(function(a){
+    var col = a.grade==="높음" ? "var(--hi)" : a.grade==="낮음" ? "var(--lo)" : "var(--mid)";
+    var half = (1 - a.C) * 0.5, lo = Math.max(-1, a.F - half), hi = Math.min(1, a.F + half);
+    return '<div class="axrow" title="'+esc(a.name)+' '+a.F.toFixed(2)+' · 신뢰 '+a.grade+'">'+
+      '<div class="axhead"><span>'+esc(a.left)+'</span><b>'+esc(a.name)+'</b><span>'+esc(a.right)+'</span></div>'+
+      '<div class="track"><span class="mid"></span>'+
+      '<span class="band" style="left:'+P(lo)+';width:'+((hi-lo)/2*100).toFixed(1)+'%;background:'+col+'"></span>'+
+      (a.S!==null ? '<span class="s" style="left:'+P(a.S)+'">▼</span>' : '')+
+      '<span class="r" style="left:'+P(a.R)+'"></span>'+
+      '<span class="f" style="left:'+P(a.F)+';background:'+col+'"></span></div></div>';
+  }).join("");
+}
+
+function deepSection(res){
+  if (!res.deep.length) return "";
+  return '<div class="card"><h2>상황별로 보면</h2>'+res.deep.map(function(d){
+    return '<h3>'+esc(d.name)+'</h3>'+d.situations.map(function(s){
+      return '<div class="sitrow"><span>'+esc(s.name)+'</span><b>'+esc(s.pole)+(s.dir!==0?' ('+s.strength+')':'')+(s.agree?'':' · 흔들림')+'</b></div>';
+    }).join("")+(d.sameAll ? '<p class="muted">상황과 관계없이 같은 쪽입니다.</p>' : '');
+  }).join("")+'</div>';
+}
+
+function openSection(res){
+  if (!res.open.length) return "";
+  return '<div class="card"><h2>직접 적은 말</h2><p class="muted">자동으로 채점하지 않습니다. 결과 코드에 함께 담겨, AI가 읽고 지침 후보로 바꿉니다.</p>'+
+    res.open.map(function(o){
+      var step = o.id.indexOf("open.") === 0 && byId(BANK.axes, o.id.slice(5)) ? {axis:o.id.slice(5)} : {id:o.id};
+      return '<p><span class="muted">'+esc(openPrompt(step))+'</span><br>'+esc(o.text)+'</p>';
+    }).join("")+'</div>';
+}
+
+function unsureSection(res){
+  if (!res.unsure.length) return "";
+  return '<div class="card"><h2>고르지 못한 문항</h2><p class="muted">점수에는 넣지 않았습니다. 적어 주신 고칠 말은 결과 코드에 담겨 AI가 읽습니다.</p><ul class="plain">'+
+    res.unsure.map(function(u){
+      var label = u.axis === "tone" ? "말투" : u.axis === "ox" ? "싫은 것" : (byId(BANK.axes, u.axis) || {name: u.axis}).name;
+      var q = u.prompt || (u.axis === "ox" ? (byId(BANK.ox, u.id) || {}).text : u.axis === "tone" ? (byId(BANK.tone.items, u.id) || {}).prompt : "");
+      return '<li><b>'+esc(label)+'</b> · '+u.kind+(q ? ' — <span class="muted">'+esc(q)+'</span>' : '')+(u.note ? '<br>고칠 말: '+esc(u.note) : '')+'</li>';
+    }).join("")+'</ul></div>';
+}
+
+// 4단계: 애매한 축과 고르지 못한 문항을 모아, AI에게 추가 질문을 받을지 생략할지 고르게 한다. 고른 것은 결과 코드(ans.fu)에 담긴다
+function followupCard(res){
+  if (state.followup) return '<div class="card"><h2>추가 질문까지 마쳤습니다</h2><p class="muted">지난 답과 합친 결과입니다. 결과 코드를 AI에게 보내면 반영안을 만들어 줍니다.</p></div>';
+  if (state.phase === 3) return "";
+  var fu = res.followup, pick = state.ans.fu;
+  if (!fu.recommend) return '<div class="card" id="fu"><h2>더 물어볼 것</h2><p>애매한 축이 없습니다. 결과 코드를 AI에게 보내면 반영안을 만들어 줍니다.</p><button class="btn" id="deep-all">그래도 상황별 질문 하기</button></div>';
+  var notes = res.unsure.filter(function(u){ return u.note; }).length;
+  var deepIds = Object.keys(DEEP.situations);
+  var canDeep = res.unclear.some(function(a){ return deepIds.indexOf(a.id) >= 0; });
+  return '<div class="card" id="fu"><h2>더 물어보면 좋은 것</h2><ul class="plain">'+
+    (fu.axes.length ? '<li>애매하게 나온 축: '+fu.axes.map(function(id){ return esc(byId(BANK.axes, id).name); }).join(", ")+'</li>' : '')+
+    (fu.items ? '<li>"잘 모르겠다·둘 다 싫다"로 넘긴 문항 '+fu.items+'개'+(notes ? '(고칠 말 '+notes+'개)' : '')+'</li>' : '')+
+    '</ul><p>AI에게 추가 질문을 받는 것을 권합니다. 이 부분만 상황을 나눠 다시 묻는 설문 파일을 AI가 만들어 줍니다(5분 안팎). 생략하면 애매한 축은 지침에서 빠집니다.</p>'+
+    '<div class="actions"><button class="btn'+(pick !== "skip" ? ' primary' : '')+'" data-fu="want">추가 질문 받기(권장)</button><button class="btn'+(pick === "skip" ? ' primary' : '')+'" data-fu="skip">생략하기</button></div>'+
+    (pick ? '<div class="note">'+(pick === "want" ? '아래 결과 코드를 AI에게 붙여 넣으면 추가 질문 파일을 만들어 줍니다.' : '아래 결과 코드를 AI에게 붙여 넣으면 지금 결과로 반영안을 만듭니다.')+'</div>' : '')+
+    (canDeep ? '<p class="muted" style="margin-top:8px">AI 없이 바로 하려면 미리 준비된 상황별 질문을 할 수 있습니다. <button class="btn" id="deep-some">준비된 질문 하기</button></p>' : '')+
+    '</div>';
+}
+
+function finish(){
+  if (!state.ans.d) state.ans.d = new Date().toISOString().slice(0,16);
+  state.done = true; if (state.phase === 3) state.deepDone = true; store();
+  var res = PrefScore.score(BANK, state.ans);
+  var rel = res.reliability;
+  var sbLabel = rel.splitHalf===null ? "계산 안 됨" : rel.splitHalf>=0.7 ? "좋음" : rel.splitHalf>=0.5 ? "보통" : "낮음";
+  var ref = res.overall === "참고용";
+  var h = '<div id="report">'+
+    '<h1>나의 AI 대화 선호</h1>'+
+    '<p class="muted">'+esc(res.date)+' · 고르기 '+Object.keys(state.ans.ab).length+'문항(확인 문항 '+BANK.ab.filter(function(i){ return i.set === "a3" && state.ans.ab[i.id]; }).length+'개 포함)'+(Object.keys(state.ans.deep).length?' · 상황별 '+Object.keys(state.ans.deep).length+'문항':'')+(res.unsure.length?' · 고르지 못함 '+res.unsure.length+'개':'')+'</p>'+
+    '<div class="card"><h2>한눈에 <span class="badge '+gradeClass(res.overall)+'">'+res.overall+'</span></h2>'+
+    (res.summary.length ? '<p>가장 뚜렷한 선호: <b>'+res.summary.map(esc).join(" · ")+'</b></p>' : '<p>뚜렷한 선호가 나온 축이 없습니다.</p>')+
+    (ref ? '<div class="note">답이 한결같지 않아 이 결과는 참고만 하세요. 며칠 뒤 다시 해 보면 더 정확해집니다.</div>' : '')+
+    (rel.oneSide ? '<div class="note">'+rel.oneSide.total+'개 축 중 '+rel.oneSide.n+'개가 '+(rel.oneSide.side==="left"?"간결·직접":"자세히·친절")+' 쪽으로 나왔습니다. 한 가지 성향이 여러 축에 번졌을 수 있습니다. 지침을 넣은 뒤 전·후 답을 비교하는 검증을 꼭 해 보세요.</div>' : '')+
+    (rel.longBias ? '<div class="note">두 답 중 더 '+(rel.longSide==="long"?"긴":"짧은")+' 쪽을 주로 골랐습니다. 길이 축 말고 다른 축 결과에도 길이 취향이 섞였을 수 있습니다.</div>' : '')+
+    '</div>'+
+
+    '<div class="card"><h2>답이 얼마나 믿을 만한가</h2><table>'+
+    '<tr><td>반분 신뢰도<br><span class="muted">같은 축의 두 문항이 같은 쪽을 가리키는 정도(1에 가까울수록 좋음)</span></td><td>'+num(rel.splitHalf)+' · '+sbLabel+'</td></tr>'+
+    '<tr><td>다시 물은 문항<br><span class="muted">좌우를 바꿔 다시 물었을 때 같은 쪽을 고른 비율</span></td><td>'+pct(rel.retestAgree)+'</td></tr>'+
+    '<tr><td>집중 확인 문항</td><td>'+(rel.attention===null?"-":rel.attention?"통과":"실패")+'</td></tr>'+
+    '<tr><td>\'나\' 쪽을 고른 비율<br><span class="muted">20~80%면 한쪽만 누르는 습관이 없는 것</span></td><td>'+pct(rel.rightShare)+(rel.posBias?' · 치우침':'')+'</td></tr>'+
+    (rel.longShare!==null ? '<tr><td>더 긴 답을 고른 비율<br><span class="muted">길이 축이 아닌 문항에서. 길이 방향을 반반으로 섞어 두어 15~85%면 정상</span></td><td>'+pct(rel.longShare)+(rel.longBias?' · 쏠림':'')+'</td></tr>' : '')+
+    '<tr><td>\'조금\'을 고른 비율</td><td>'+pct(rel.mildShare)+'</td></tr>'+
+    (rel.unsureShare ? '<tr><td>"잘 모르겠다·둘 다 싫다" 비율<br><span class="muted">30%를 넘으면 종합을 한 단계 낮춘다</span></td><td>'+pct(rel.unsureShare)+'</td></tr>' : '')+
+    '<tr><td>너무 빨리 넘긴 문항<br><span class="muted">읽을 시간보다 빨리 고른 문항은 절반만 반영</span></td><td>'+rel.fast+'개</td></tr>'+
+    '</table><p class="muted" style="margin-top:8px">축이 11개라 반분 신뢰도는 거친 값입니다. 여러 축에서 가운데를 고르면 값이 낮게 나올 수 있습니다.</p></div>'+
+
+    '<div class="card profile"><h2>축별 위치</h2>'+profileRows(res.axes)+
+    '<div class="legend"><span>● 최종 위치(색: 신뢰 높음·보통·낮음)</span><span>▼ 말로 답한 선호</span><span>■ 고른 선호</span><span>옅은 띠: 답이 흔들린 폭</span></div></div>'+
+
+    (res.sayDiff.length ? '<div class="card"><h2>말과 선택이 다른 축</h2>'+res.sayDiff.map(function(a){
+      return '<p><b>'+esc(a.name)+'</b>: 말로는 "'+esc(a.S<0?a.left:a.right)+'" 쪽이 좋다고 했지만, 실제로는 "'+esc(a.R<0?a.left:a.right)+'" 쪽 답을 더 골랐습니다.</p>';
+    }).join("")+'<p class="muted">지침은 실제로 고른 쪽을 더 무겁게 반영했습니다.</p></div>' : '')+
+
+    deepSection(res)+
+
+    '<div class="card"><h2>말투</h2><table>'+res.tone.byContext.map(function(c){
+      return '<tr><td>'+esc(c.context)+'</td><td>'+(c.pick?STYLES[c.pick]:(c.shaky?"흔들림("+c.picks.map(function(p){return STYLES[p];}).join("·")+")":"-"))+'</td></tr>';
+    }).join("")+'</table></div>'+
+
+    '<div class="card"><h2>거슬린다고 한 것</h2>'+
+    (res.ox.filter(function(o){return o.dislike;}).length ? '<ul class="plain">'+res.ox.filter(function(o){return o.dislike;}).map(function(o){return '<li>'+esc(o.text)+'</li>';}).join("")+'</ul>' : '<p class="muted">없음</p>')+'</div>'+
+
+    openSection(res)+
+    unsureSection(res)+
+
+    (ref ? '<div class="card"><h2>지침 초안</h2><p>신뢰도가 낮아 지침 초안을 만들지 않았습니다.</p></div>'
+         : '<div class="card"><h2>지침 초안</h2><p class="muted">AI 설정 파일(CLAUDE.md 등)에 넣을 문장입니다. 넣기 전에 AI가 기존 지침과 겹치는지 확인합니다.</p><pre id="rules">'+esc(res.rules)+'</pre></div>')+
+    '</div>'+
+
+    followupCard(res)+
+
+    '<div class="card"><h2>결과 보내기</h2><p class="muted">결과 코드를 복사해 AI에게 붙여 넣으면 지침 파일에 넣을 안을 만들어 줍니다.</p>'+
+    '<textarea readonly class="code" id="code">만드는 중…</textarea>'+
+    '<div class="actions" style="margin-top:8px"><button class="btn primary" data-copy="code">결과 코드 복사</button>'+(ref?'':'<button class="btn" data-copy="rules">지침 복사</button>')+
+    '<button class="btn" id="dl-json">답 파일 저장</button><button class="btn" id="dl-html">보고서 저장</button><button class="btn" id="restart">처음부터 다시</button></div></div>';
+  app.innerHTML = h;
+  window.scrollTo(0,0);
+  makeCode(state.ans).then(function(c){ var el = document.getElementById("code"); if (el) el.value = c; });
+}
+
+// 결과 코드: 가능하면 압축(PS2), 아니면 그대로(PS1)
+function b64(bytes){ var s = ""; for (var i=0;i<bytes.length;i+=0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i+0x8000)); return btoa(s); }
+function makeCode(ans){
+  var json = JSON.stringify(ans);
+  var plain = function(){ return "PS1." + btoa(unescape(encodeURIComponent(json))); };
+  if (!window.CompressionStream) return Promise.resolve(plain());
+  try{
+    var cs = new Blob([json]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+    return new Response(cs).arrayBuffer().then(function(buf){ return "PS2." + b64(new Uint8Array(buf)); }, plain);
+  }catch(e){ return Promise.resolve(plain()); }
+}
+
+function copy(id, btn){
+  var el = document.getElementById(id), text = el.value !== undefined ? el.value : el.textContent;
+  if (!/^PS[12]\./.test(text) && id === "code") return;   // 아직 만드는 중
+  var ok = function(){ var t = btn.textContent; btn.textContent = "복사했습니다"; setTimeout(function(){ btn.textContent = t; }, 1500); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, fallback);
+  else fallback();
+  function fallback(){ try{ if (el.select) el.select(); else { var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); } document.execCommand("copy"); ok(); }catch(e){} }
+}
+function download(name, text, type){
+  var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], {type: type + ";charset=utf-8"}));
+  a.download = name; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function saveReport(){
+  var css = document.querySelector("style").outerHTML;
+  var body = document.getElementById("report").outerHTML;
+  download("선호진단_보고서.html", '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>AI 대화 선호 보고서</title>'+css+'</head><body><div class="wrap">'+body+'</div></body></html>', "text/html");
+}
+
+// 화면 검수용: #demo = 가상의 답으로 결과 화면, #demo-deep = 심층까지 마친 결과, #start = 저장 없이 첫 문항
+function demo(withDeep){
+  state = newState(); state.demo = true;
+  var prof = [-0.4,-1,0.1,-0.5,0.8,-1,-0.6,0.15,-0.1,0.05,-1], P = {};
+  BANK.axes.forEach(function(a, i){ P[a.id] = prof[i % prof.length]; });
+  function rOf(want, side){ var v = side === 0 ? want : -want; return v >= 0.75 ? 2 : v > 0 ? 1 : v <= -0.75 ? -2 : -1; }
+  BANK.ab.forEach(function(it){
+    if (it.set === "a3") return;
+    state.ans.ab[it.id] = { s: state.sides[it.id], r: rOf(P[it.axis] + (Math.random() - 0.5) * 0.6, state.sides[it.id]), t: 6000 };
+  });
+  var sk = BANK.ab.filter(function(i){ return i.set !== "a3"; });
+  state.ans.ab[sk[5].id] = { s: state.sides[sk[5].id], r: 0, u: 1, t: 5000 };
+  state.ans.ab[sk[17].id] = { s: state.sides[sk[17].id], r: 0, x: 1, note: "둘 다 깁니다. 숫자 한 줄이면 됩니다.", t: 7000 };
+  BANK.tone.items.forEach(function(it){ state.ans.tone[it.id] = { c: "formal", t: 4000 }; });
+  BANK.ox.forEach(function(o, i){ state.ans.ox[o.id] = i < 3 ? 1 : i === 3 ? 2 : 0; });
+  BANK.axes.forEach(function(a){ state.ans.sl[a.id] = Math.max(1, Math.min(PTS, Math.round((PTS+1)/2 + (PTS-1)/2 * P[a.id]))); });
+  state.ans.att = { s: 0, r: 1, t: 3000 };
+  state.reserve = []; state.phase = 2; state.queue = []; state.pos = 0;
+  if (withDeep){
+    var sitWant = { small: 0.8, outside: -0.9, money: -0.8, work: -0.6, "new": 0.7, hurry: -0.9, taste: -0.7, quality: 0.6, cost: 0.9, quick: -0.8, chat: -0.9, report: 0.6, learn: 0.7 };
+    state.deepSides = {};
+    DEEP.items.forEach(function(it){ var s = rside(); state.deepSides[it.id] = s; state.ans.deep[it.id] = { s: s, r: rOf(sitWant[it.sit] || 0.3, s), t: 6000 }; });
+    state.ans.open["open.autonomy"] = "파일 정리 같은 건 알아서 하고, 메일 보내기나 돈 쓰는 건 꼭 먼저 물어봐.";
+    state.ans.open["open.worst"] = "확인 안 한 걸 확인했다고 말할 때.";
+    state.phase = 3;
+  }
+  finish();
+}
+if (location.hash === "#demo") demo(false);
+else if (location.hash === "#demo-deep") demo(true);
+else if (location.hash === "#start"){ state = PRIOR ? followupState() : newState(); state.demo = true; render(); }
+else intro();
+</script>
+</body>
+</html>

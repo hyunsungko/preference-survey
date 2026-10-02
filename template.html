@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 대화 선호 진단</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--ink:#1d1f23;--sub:#666b73;--line:#e3e0d8;--accent:#2f6f5e;--accent-ink:#fff;--soft:#eaf2ee;--hi:#2f6f5e;--mid:#b07f2a;--lo:#a5482b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141517;--card:#1d1f22;--ink:#ecebe7;--sub:#9a9ea5;--line:#2c2f33;--accent:#6cc0a6;--accent-ink:#0f1412;--soft:#1f2a27;--hi:#6cc0a6;--mid:#e0b25e;--lo:#e07a5a}}
+:root[data-theme="dark"]{--bg:#141517;--card:#1d1f22;--ink:#ecebe7;--sub:#9a9ea5;--line:#2c2f33;--accent:#6cc0a6;--accent-ink:#0f1412;--soft:#1f2a27;--hi:#6cc0a6;--mid:#e0b25e;--lo:#e07a5a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;word-break:keep-all;overflow-wrap:anywhere}
+.wrap{max-width:720px;margin:0 auto;padding:20px 16px 56px}
+h1{font-size:26px;line-height:1.3;margin:8px 0 12px}
+h2{font-size:19px;margin:0 0 10px}
+h3{font-size:16px;margin:14px 0 6px}
+p{margin:0 0 10px}
+.muted{color:var(--sub);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 16px;margin-bottom:14px}
+@media(max-width:360px){.wrap{padding:16px 10px 48px}.card{padding:16px 12px}}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 18px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:600;cursor:pointer;touch-action:manipulation}
+.btn:focus-visible,.opt:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.full{width:100%}
+ul.plain{padding-left:18px;margin:8px 0 14px}ul.plain li{margin:4px 0}
+.top{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.bar{flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);transition:width .25s ease-out}
+.count{font-size:13px;color:var(--sub);white-space:nowrap}
+.part{font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.04em;margin-bottom:6px}
+.chip{display:inline-block;font-size:12px;padding:2px 10px;border-radius:999px;background:var(--soft);color:var(--accent);margin-bottom:8px}
+.prompt{font-size:17px;font-weight:600;margin-bottom:12px}
+.opts{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:14px}
+@media(min-width:620px){.opts.two{grid-template-columns:1fr 1fr}}
+.opt{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 14px 12px;white-space:pre-line}
+.opt b{display:inline-block;font-size:13px;color:var(--sub);margin-bottom:4px}
+button.opt{font:inherit;color:inherit;text-align:left;cursor:pointer;width:100%}
+button.opt:hover{border-color:var(--accent)}
+.scale{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.scale .btn{padding:0 4px;font-size:15px;flex-direction:column;line-height:1.25;min-height:56px}
+.scale .btn small{font-weight:400;color:var(--sub);font-size:12px}
+.ox{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.skip{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.skip .btn{min-height:44px;font-weight:400;font-size:14px;color:var(--sub)}
+.fu-on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.likert{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin:12px 0 6px}
+.likert .btn{padding:0;min-height:48px;border-radius:50%;aspect-ratio:1;font-size:14px;max-width:52px;width:100%;justify-self:center}
+.poles{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:var(--sub)}
+.poles span:last-child{text-align:right}
+textarea{width:100%;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);padding:10px;font:15px/1.5 inherit}
+textarea.code{min-height:90px;font:12px/1.4 ui-monospace,Consolas,monospace;word-break:break-all}
+textarea.free{min-height:110px}
+.badge{display:inline-block;padding:3px 12px;border-radius:999px;font-size:13px;font-weight:700;color:#fff}
+.g-high{background:var(--hi)}.g-mid{background:var(--mid)}.g-low{background:var(--lo)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td{padding:8px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+td:last-child{text-align:right;white-space:nowrap}
+.axrow{padding:10px 0 4px;border-bottom:1px solid var(--line)}
+.axrow:last-of-type{border-bottom:0}
+.axhead{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;font-size:13px;color:var(--sub);align-items:end}
+.axhead b{color:var(--ink);font-size:15px;text-align:center}
+.axhead span:last-child{text-align:right}
+.track{position:relative;height:34px;margin:2px 8px 0}
+.track::before{content:"";position:absolute;left:0;right:0;top:15px;height:5px;border-radius:3px;background:var(--line)}
+.track .mid{position:absolute;left:50%;top:9px;width:1.5px;height:17px;background:var(--sub)}
+.track .band{position:absolute;top:11px;height:13px;border-radius:7px;opacity:.25}
+.track .f{position:absolute;top:8px;width:19px;height:19px;border-radius:50%;transform:translateX(-50%);border:2px solid var(--card)}
+.track .s{position:absolute;top:-3px;transform:translateX(-50%);font-size:11px;color:var(--sub);line-height:1}
+.track .r{position:absolute;top:27px;width:7px;height:7px;transform:translateX(-50%);background:var(--sub)}
+.sitrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
+.sitrow:last-child{border-bottom:0}
+.sitrow b{white-space:nowrap}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--sub);margin-top:6px}
+pre{white-space:pre-wrap;background:var(--soft);border-radius:12px;padding:12px;font-size:14px;margin:0 0 10px;font-family:inherit}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.note{background:var(--soft);border-radius:12px;padding:10px 12px;font-size:14px;margin:8px 0}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="app"></div>
+</div>
+<script>
+/*__SCORE__*/
+</script>
+<script>
+"use strict";
+var BANK = /*__BANK__*/null;
+var PRIOR = /*__PRIOR__*/null;   // 추가 질문 설문이면 1차 답이 들어 있다
+var DEEP = BANK.deep;
+var FU = DEEP.followup || null;
+var KEY = "prefsurvey-" + (BANK.id || BANK.version) + (PRIOR ? "-r" + (FU.round || 2) : "");
+var STYLES = BANK.tone.styles;
+var PTS = BANK.slider_points || 5;
+var app = document.getElementById("app");
+var state;
+
+function store(){ if (state && state.demo) return; try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+function load(){ try{ var s = localStorage.getItem(KEY); return s ? JSON.parse(s) : null; }catch(e){ return null; } }
+function clearStore(){ try{ localStorage.removeItem(KEY); }catch(e){} }
+function shuffle(a){ a = a.slice(); for (var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+function byId(list, id){ for (var i=0;i<list.length;i++) if (list[i].id===id) return list[i]; return null; }
+function now(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+function rside(){ return Math.random() < 0.5 ? 0 : 1; }
+
+function newState(){
+  var sides = {};
+  BANK.axes.forEach(function(ax){
+    var s1 = rside();
+    BANK.ab.forEach(function(it){
+      if (it.axis !== ax.id) return;
+      sides[it.id] = it.set === "a1" ? s1 : it.set === "a1r" ? 1 - s1 : rside();
+    });
+  });
+  function ab(set){ return BANK.ab.filter(function(i){ return i.set===set; }).map(function(i){ return {k:"ab", id:i.id}; }); }
+  function tone(set){ return BANK.tone.items.filter(function(i){ return i.set===set; }).map(function(i){ return {k:"tone", id:i.id}; }); }
+  var queue = []
+    .concat(shuffle(ab("a1").concat(tone("t1"))))
+    .concat(shuffle(ab("a2").concat(tone("t2")).concat([{k:"att", id:"attn"}])))
+    .concat(shuffle(ab("a1r").concat(tone("t3")).concat(tone("t1r"))));
+  var toneOrder = {};
+  BANK.tone.items.forEach(function(it){ toneOrder[it.id] = shuffle(Object.keys(it.options)); });
+  return { v: BANK.version, started: new Date().toISOString(), sides: sides, queue: queue, pos: 0, phase: 1,
+           toneOrder: toneOrder, ans: { v: BANK.version, b: BANK.id, d: "", ab: {}, tone: {}, ox: {}, sl: {}, deep: {}, open: {} } };
+}
+
+// 추가 질문 설문: 1차 답을 이어받아, AI가 짠 followup 문항(상황별 고르기 + 주관식)만 묻는다
+function followupState(){
+  var ans = JSON.parse(JSON.stringify(PRIOR));
+  ans.deep = ans.deep || {}; ans.open = ans.open || {}; ans.round = FU.round || 2; ans.d = "";
+  var st = { v: BANK.version, started: new Date().toISOString(), sides: {}, queue: [], pos: 0, phase: 3, followup: true,
+             toneOrder: {}, deepSides: {}, deepStart: 0, ans: ans };
+  var q = (FU.ask || []).map(function(id){ st.deepSides[id] = rside(); return {k:"deep", id:id}; });
+  st.queue = shuffle(q).concat((FU.open || []).map(function(o){ return {k:"open", id:o.id}; }));
+  return st;
+}
+
+// 3부가 끝나면 엇갈린 축에 확인 문항을 넣고, 그 뒤에 싫은 것·직접 답하기를 붙인다
+function extendQueue(){
+  if (state.phase === 1 && state.pos >= state.queue.length){
+    var extra = [];
+    BANK.axes.forEach(function(ax){
+      if (PrefScore.needsReserve(BANK, state.ans, ax.id)){
+        BANK.ab.forEach(function(it){ if (it.axis===ax.id && it.set==="a3") extra.push({k:"ab", id:it.id}); });
+      }
+    });
+    state.reserve = extra.map(function(e){ return e.id; });
+    state.queue = state.queue.concat(shuffle(extra))
+      .concat(shuffle(BANK.ox.map(function(o){ return {k:"ox", id:o.id}; })))
+      .concat(shuffle(BANK.axes.map(function(a){ return {k:"sl", id:a.id}; })));
+    state.phase = 2;
+    store();
+  }
+}
+
+// 심층 설문: 애매한 축(또는 고른 축)만 상황별로 묻고, 주관식을 붙인다
+function startDeep(all){
+  var res = PrefScore.score(BANK, state.ans);
+  var unclear = res.unclear.map(function(a){ return a.id; });
+  var deepAxes = Object.keys(DEEP.situations).filter(function(id){ return all || unclear.indexOf(id) >= 0; });
+  var q = [];
+  state.deepSides = state.deepSides || {};
+  var fuAsk = FU && FU.ask || [];
+  DEEP.items.forEach(function(it){
+    if (deepAxes.indexOf(it.axis) < 0 || fuAsk.indexOf(it.id) >= 0) return;   // 추가 질문용 문항은 추가 설문에서만 묻는다
+    state.deepSides[it.id] = rside();
+    q.push({k:"deep", id:it.id});
+  });
+  q = shuffle(q);
+  var openAxes = all ? unclear.concat(deepAxes.filter(function(id){ return unclear.indexOf(id) < 0; })) : unclear;
+  openAxes.forEach(function(id){ q.push({k:"open", id:"open."+id, axis:id}); });
+  DEEP.open.general.forEach(function(g){ q.push({k:"open", id:g.id}); });
+  state.queue = state.queue.concat(q);
+  state.phase = 3; state.deepAxes = deepAxes; state.deepStart = state.pos;
+  store(); render();
+}
+
+function estTotal(){ return state.phase === 1 ? state.queue.length + 2 + BANK.ox.length + BANK.axes.length : state.queue.length; }
+function partOf(step){
+  return { ox: "싫은 것 고르기", sl: "직접 답하기", deep: "상황별 질문", open: "직접 적기" }[step.k] || "둘 중 고르기";
+}
+function header(step){
+  var base = state.phase === 3 ? state.deepStart : 0;
+  var done = state.pos - base, total = estTotal() - base;
+  return '<div class="top">'+(done > 0 && !state.noteFor ? '<button class="btn" data-back="1" style="min-height:36px;padding:0 10px;font-size:13px">이전</button>' : '')+
+         '<div class="bar" aria-hidden="true"><i style="width:'+Math.round(100*done/total)+'%"></i></div>'+
+         '<span class="count">'+(done+1)+' / '+(state.phase===2||state.phase===3?'':'약 ')+total+'</span></div>'+
+         '<div class="part">'+partOf(step)+'</div>';
+}
+
+var shownAt = 0;
+function render(){
+  extendQueue();
+  if (state.pos >= state.queue.length) return finish();
+  var step = state.queue[state.pos];
+  shownAt = now();
+  var h = header(step);
+  if (state.noteFor === step.id) h += renderNote(step);
+  else if (step.k === "ab" || step.k === "att" || step.k === "deep") h += renderAB(step);
+  else if (step.k === "tone") h += renderTone(step);
+  else if (step.k === "ox") h += renderOX(step);
+  else if (step.k === "sl") h += renderSlider(step);
+  else if (step.k === "open") h += renderOpen(step);
+  app.innerHTML = h;
+  window.scrollTo(0,0);
+}
+
+function renderAB(step){
+  var it, side, chip;
+  if (step.k === "att"){ it = BANK.attention; side = 0; chip = "확인"; }
+  else if (step.k === "deep"){ it = byId(DEEP.items, step.id); side = state.deepSides[it.id]; chip = sitName(it) ; }
+  else { it = byId(BANK.ab, step.id); side = state.sides[it.id]; chip = esc(it.context); }
+  var ga = side === 0 ? it.left : it.right, na = side === 0 ? it.right : it.left;
+  var lead = (/AI의 (답|보고)$/.test(it.prompt) || step.k === "att") ? "" : "질문: ";
+  var btns = [[-2,"가","확실히"],[-1,"가","조금"],[1,"나","조금"],[2,"나","확실히"]].map(function(b){
+    return '<button class="btn" data-r="'+b[0]+'">'+b[1]+'<small>'+b[2]+'</small></button>';
+  }).join("");
+  return '<div class="card"><span class="chip">'+chip+'</span><div class="prompt">'+lead+esc(it.prompt)+'</div>'+
+    '<div class="opts two"><div class="opt"><b>가</b><br>'+esc(ga)+'</div><div class="opt"><b>나</b><br>'+esc(na)+'</div></div>'+
+    '<p class="muted">더 마음에 드는 답은?</p><div class="scale" role="group" aria-label="고르기">'+btns+'</div>'+
+    (step.k === "att" ? '' : '<div class="skip"><button class="btn" data-u="1">잘 모르겠다</button><button class="btn" data-x="1">둘 다 싫다</button></div>')+
+    '</div>';
+}
+
+// '둘 다 싫다'·'모두 별로'를 누르면 같은 문항에서 고칠 말을 받는다
+function renderNote(step){
+  var it = step.k === "tone" ? byId(BANK.tone.items, step.id) : step.k === "deep" ? byId(DEEP.items, step.id) : byId(BANK.ab, step.id);
+  var shown = step.k === "tone" ? state.toneOrder[it.id].map(function(c, i){ return '<div class="opt"><b>'+(i+1)+'</b><br>'+esc(it.options[c])+'</div>'; }).join("")
+    : (function(){ var s = step.k === "deep" ? state.deepSides[it.id] : state.sides[it.id];
+        return '<div class="opt"><b>가</b><br>'+esc(s === 0 ? it.left : it.right)+'</div><div class="opt"><b>나</b><br>'+esc(s === 0 ? it.right : it.left)+'</div>'; })();
+  return '<div class="card"><span class="chip">'+(step.k === "tone" ? "말투" : "둘 다 싫다")+'</span><div class="prompt">'+esc(it.prompt)+'</div>'+
+    '<div class="opts'+(step.k === "tone" ? '' : ' two')+'">'+shown+'</div>'+
+    '<p><b>이 답을 어떻게 고치면 좋을까요?</b></p>'+
+    '<textarea class="free" id="free" maxlength="'+DEEP.open.max+'" placeholder="예: 숫자만 한 줄로, 인사말 빼고"></textarea>'+
+    '<p class="muted">한두 줄이면 됩니다. AI가 읽고 지침이나 추가 질문을 만들 때 씁니다.</p>'+
+    '<div class="actions"><button class="btn primary" data-note="save">다음</button><button class="btn" data-note="skip">적지 않고 넘어가기</button><button class="btn" data-note="back">다시 고르기</button></div></div>';
+}
+function sitName(it){
+  var s = byId(DEEP.situations[it.axis], it.sit);
+  return esc(s ? s.name : it.context);
+}
+
+function renderTone(step){
+  var it = byId(BANK.tone.items, step.id);
+  var cards = state.toneOrder[it.id].map(function(c, i){
+    return '<button class="opt" data-c="'+c+'"><b>'+(i+1)+'</b><br>'+esc(it.options[c])+'</button>';
+  }).join("");
+  return '<div class="card"><span class="chip">말투 · '+esc(it.context)+'</span>'+
+    '<div class="prompt">상황: '+esc(it.prompt)+'</div><p class="muted">AI가 이렇게 알린다면, 가장 마음에 드는 말투는?</p>'+
+    '<div class="opts">'+cards+'</div><div class="skip"><button class="btn" data-x="1">모두 별로</button></div></div>';
+}
+
+function renderOX(step){
+  var o = byId(BANK.ox, step.id);
+  return '<div class="card"><span class="chip">AI가 이렇게 하면</span><div class="prompt">'+esc(o.text)+'</div>'+
+    '<div class="ox"><button class="btn" data-ox="1">거슬린다</button><button class="btn" data-ox="0">괜찮다</button><button class="btn" data-ox="2">잘 모르겠다</button></div></div>';
+}
+
+function renderSlider(step){
+  var ax = byId(BANK.axes, step.id), mid = (PTS + 1) / 2, dots = "";
+  for (var v = 1; v <= PTS; v++) dots += '<button class="btn" data-sl="'+v+'" aria-label="'+v+'점">'+(v===mid?"·":"")+'</button>';
+  return '<div class="card"><span class="chip">'+esc(ax.name)+'</span>'+
+    '<div class="prompt">'+esc(ax.slider)+'</div>'+
+    '<div class="poles"><span>'+esc(ax.left)+'</span><span>'+esc(ax.right)+'</span></div>'+
+    '<div class="likert">'+dots+'</div><p class="muted" style="text-align:center">가운데는 "상관없음"</p></div>';
+}
+
+function openPrompt(step){
+  if (step.axis){
+    var ax = byId(BANK.axes, step.axis);
+    return DEEP.open.axis.replace("{name}", ax.name).replace("{left}", ax.left).replace("{right}", ax.right);
+  }
+  var g = byId(DEEP.open.general, step.id) || (FU && byId(FU.open || [], step.id));
+  return g ? g.text : step.id;
+}
+function renderOpen(step){
+  var prev = state.ans.open[step.id] || "";
+  var chip = step.axis ? esc(byId(BANK.axes, step.axis).name) : /^f\./.test(step.id) ? "추가 질문" : "마지막 질문";
+  return '<div class="card"><span class="chip">'+chip+'</span><div class="prompt">'+esc(openPrompt(step))+'</div>'+
+    '<textarea class="free" id="free" maxlength="'+DEEP.open.max+'" placeholder="한두 줄이면 충분합니다">'+esc(prev)+'</textarea>'+
+    '<p class="muted">'+DEEP.open.max+'자까지. 적을 게 없으면 건너뛰세요.</p>'+
+    '<div class="actions"><button class="btn primary" data-open="save">다음</button><button class="btn" data-open="skip">건너뛰기</button></div></div>';
+}
+
+app.addEventListener("click", function(e){
+  var b = e.target.closest("button"); if (!b) return;
+  if (b.id === "start"){ state = PRIOR ? followupState() : newState(); store(); return render(); }
+  if (b.dataset.back){ state.pos--; store(); return render(); }   // 한 문항 되돌아가 다시 고른다(새 답이 덮어쓴다)
+  if (b.dataset.fu){ state.ans.fu = b.dataset.fu; store(); finish(); var fu = document.getElementById("fu"); if (fu) fu.scrollIntoView(); return; }
+  if (b.id === "resume"){ return render(); }
+  if (b.id === "restart"){ clearStore(); state = null; return intro(); }
+  if (b.id === "deep-some"){ return startDeep(false); }
+  if (b.id === "deep-all"){ return startDeep(true); }
+  if (b.dataset.copy){ return copy(b.dataset.copy, b); }
+  if (b.id === "dl-json"){ return download("선호진단_답.json", JSON.stringify(state.ans, null, 1), "application/json"); }
+  if (b.id === "dl-html"){ return saveReport(); }
+  if (!state || state.pos >= state.queue.length) return;
+  var step = state.queue[state.pos], t = Math.round(now() - shownAt);
+  if (t < 400) return;   // 같은 단추를 빠르게 두 번 눌러 다음 문항까지 넘어가는 것을 막는다
+  var side = step.k === "deep" ? state.deepSides[step.id] : state.sides[step.id];
+  var put = function(a){ if (step.k === "deep") state.ans.deep[step.id] = a; else state.ans.ab[step.id] = a; };
+  if (b.dataset.r){
+    var r = parseInt(b.dataset.r, 10);
+    if (step.k === "att") state.ans.att = { s: 0, r: r, t: t };
+    else put({ s: side, r: r, t: t });
+  } else if (b.dataset.u){ put({ s: side, r: 0, u: 1, t: t });   // 잘 모르겠다: 축 점수에 넣지 않는다
+  } else if (b.dataset.x){ state.noteFor = step.id; state.noteT = t; store(); return render();
+  } else if (b.dataset.note){
+    if (b.dataset.note === "back"){ delete state.noteFor; store(); return render(); }
+    var note = b.dataset.note === "save" ? document.getElementById("free").value.trim().slice(0, DEEP.open.max) : "";
+    if (step.k === "tone") state.ans.tone[step.id] = { c: "none", note: note, t: state.noteT };
+    else put({ s: side, r: 0, x: 1, note: note, t: state.noteT });   // 둘 다 싫다: 점수에 넣지 않고 고칠 말만 남긴다
+    delete state.noteFor; delete state.noteT;
+  } else if (b.dataset.c){ state.ans.tone[step.id] = { c: b.dataset.c, t: t };
+  } else if (b.dataset.ox){ state.ans.ox[step.id] = parseInt(b.dataset.ox, 10);
+  } else if (b.dataset.sl){ state.ans.sl[step.id] = parseInt(b.dataset.sl, 10);
+  } else if (b.dataset.open){
+    var txt = b.dataset.open === "save" ? document.getElementById("free").value.trim().slice(0, DEEP.open.max) : "";
+    if (txt) state.ans.open[step.id] = txt; else delete state.ans.open[step.id];
+  } else return;
+  state.pos++; store(); render();
+});
+
+function intro(){
+  var saved = load();
+  var resume = saved && !saved.done && saved.pos < saved.queue.length;
+  var doneBefore = saved && saved.done && !resume;
+  var n = FU ? (FU.ask || []).length + (FU.open || []).length : 0;
+  app.innerHTML =
+    (PRIOR ? '<h1>추가 질문</h1>'+
+    '<div class="card"><ul class="plain">'+
+    '<li>지난번 답을 이어받았습니다. 애매하게 나왔거나 "잘 모르겠다·둘 다 싫다"로 넘긴 부분만 '+n+'문항 더 묻습니다.</li>'+
+    '<li>상황을 나눠 물으니, 그 상황이라면 어느 쪽이 나은지만 고르세요.</li>'+
+    '<li>끝나면 지난 답과 합친 결과가 나옵니다. 답은 이 브라우저에만 저장됩니다.</li></ul>'
+    : '<h1>AI 대화 선호 진단</h1>'+
+    '<div class="card"><ul class="plain">'+
+    '<li>같은 내용을 두 가지로 쓴 답을 보여 드립니다. 더 마음에 드는 쪽을 고르세요.</li>'+
+    '<li>정답은 없습니다. 오래 고민하지 말고 읽은 대로 고르세요.</li>'+
+    '<li>고르기 어려우면 "잘 모르겠다"를, 둘 다 마음에 안 들면 "둘 다 싫다"를 누르고 어떻게 고치면 좋을지 적어 주세요.</li>'+
+    '<li>약 55문항, 15분쯤 걸립니다. 끝나면 애매하게 나온 부분을 AI가 추가 질문으로 더 물을 수 있습니다.</li>'+
+    '<li>같은 질문이 모양을 바꿔 다시 나옵니다. 답이 얼마나 한결같은지 보는 장치입니다.</li>'+
+    '<li>창을 닫아도 이어서 할 수 있습니다. 답은 이 브라우저에만 저장되고 어디로도 보내지 않습니다.</li></ul>')+
+    (resume ? '<div class="actions"><button class="btn primary" id="resume">이어서 하기</button><button class="btn" id="start">처음부터</button></div>'
+            : doneBefore ? '<div class="actions"><button class="btn primary" id="resume">지난 결과 보기</button><button class="btn" id="start">다시 하기</button></div>'
+            : '<button class="btn primary full" id="start">시작하기</button>')+
+    '</div>';
+  if (resume || doneBefore) state = saved;
+}
+
+/* ---------- 결과 ---------- */
+function gradeClass(g){ return g==="높음"||g==="믿을 만함" ? "g-high" : g==="낮음"||g==="참고용" ? "g-low" : "g-mid"; }
+function pct(x){ return x===null||x===undefined ? "-" : Math.round(x*100)+"%"; }
+function num(x){ return x===null||x===undefined ? "-" : x.toFixed(2); }
+
+function profileRows(axes){
+  var P = function(v){ return ((Math.max(-1, Math.min(1, v)) + 1) / 2 * 100).toFixed(1) + "%"; };
+  return axes.map(function(a){
+    var col = a.grade==="높음" ? "var(--hi)" : a.grade==="낮음" ? "var(--lo)" : "var(--mid)";
+    var half = (1 - a.C) * 0.5, lo = Math.max(-1, a.F - half), hi = Math.min(1, a.F + half);
+    return '<div class="axrow" title="'+esc(a.name)+' '+a.F.toFixed(2)+' · 신뢰 '+a.grade+'">'+
+      '<div class="axhead"><span>'+esc(a.left)+'</span><b>'+esc(a.name)+'</b><span>'+esc(a.right)+'</span></div>'+
+      '<div class="track"><span class="mid"></span>'+
+      '<span class="band" style="left:'+P(lo)+';width:'+((hi-lo)/2*100).toFixed(1)+'%;background:'+col+'"></span>'+
+      (a.S!==null ? '<span class="s" style="left:'+P(a.S)+'">▼</span>' : '')+
+      '<span class="r" style="left:'+P(a.R)+'"></span>'+
+      '<span class="f" style="left:'+P(a.F)+';background:'+col+'"></span></div></div>';
+  }).join("");
+}
+
+function deepSection(res){
+  if (!res.deep.length) return "";
+  return '<div class="card"><h2>상황별로 보면</h2>'+res.deep.map(function(d){
+    return '<h3>'+esc(d.name)+'</h3>'+d.situations.map(function(s){
+      return '<div class="sitrow"><span>'+esc(s.name)+'</span><b>'+esc(s.pole)+(s.dir!==0?' ('+s.strength+')':'')+(s.agree?'':' · 흔들림')+'</b></div>';
+    }).join("")+(d.sameAll ? '<p class="muted">상황과 관계없이 같은 쪽입니다.</p>' : '');
+  }).join("")+'</div>';
+}
+
+function openSection(res){
+  if (!res.open.length) return "";
+  return '<div class="card"><h2>직접 적은 말</h2><p class="muted">자동으로 채점하지 않습니다. 결과 코드에 함께 담겨, AI가 읽고 지침 후보로 바꿉니다.</p>'+
+    res.open.map(function(o){
+      var step = o.id.indexOf("open.") === 0 && byId(BANK.axes, o.id.slice(5)) ? {axis:o.id.slice(5)} : {id:o.id};
+      return '<p><span class="muted">'+esc(openPrompt(step))+'</span><br>'+esc(o.text)+'</p>';
+    }).join("")+'</div>';
+}
+
+function unsureSection(res){
+  if (!res.unsure.length) return "";
+  return '<div class="card"><h2>고르지 못한 문항</h2><p class="muted">점수에는 넣지 않았습니다. 적어 주신 고칠 말은 결과 코드에 담겨 AI가 읽습니다.</p><ul class="plain">'+
+    res.unsure.map(function(u){
+      var label = u.axis === "tone" ? "말투" : u.axis === "ox" ? "싫은 것" : (byId(BANK.axes, u.axis) || {name: u.axis}).name;
+      var q = u.prompt || (u.axis === "ox" ? (byId(BANK.ox, u.id) || {}).text : u.axis === "tone" ? (byId(BANK.tone.items, u.id) || {}).prompt : "");
+      return '<li><b>'+esc(label)+'</b> · '+u.kind+(q ? ' — <span class="muted">'+esc(q)+'</span>' : '')+(u.note ? '<br>고칠 말: '+esc(u.note) : '')+'</li>';
+    }).join("")+'</ul></div>';
+}
+
+// 4단계: 애매한 축과 고르지 못한 문항을 모아, AI에게 추가 질문을 받을지 생략할지 고르게 한다. 고른 것은 결과 코드(ans.fu)에 담긴다
+function followupCard(res){
+  if (state.followup) return '<div class="card"><h2>추가 질문까지 마쳤습니다</h2><p class="muted">지난 답과 합친 결과입니다. 결과 코드를 AI에게 보내면 반영안을 만들어 줍니다.</p></div>';
+  if (state.phase === 3) return "";
+  var fu = res.followup, pick = state.ans.fu;
+  if (!fu.recommend) return '<div class="card" id="fu"><h2>더 물어볼 것</h2><p>애매한 축이 없습니다. 결과 코드를 AI에게 보내면 반영안을 만들어 줍니다.</p><button class="btn" id="deep-all">그래도 상황별 질문 하기</button></div>';
+  var notes = res.unsure.filter(function(u){ return u.note; }).length;
+  var deepIds = Object.keys(DEEP.situations);
+  var canDeep = res.unclear.some(function(a){ return deepIds.indexOf(a.id) >= 0; });
+  return '<div class="card" id="fu"><h2>더 물어보면 좋은 것</h2><ul class="plain">'+
+    (fu.axes.length ? '<li>애매하게 나온 축: '+fu.axes.map(function(id){ return esc(byId(BANK.axes, id).name); }).join(", ")+'</li>' : '')+
+    (fu.items ? '<li>"잘 모르겠다·둘 다 싫다"로 넘긴 문항 '+fu.items+'개'+(notes ? '(고칠 말 '+notes+'개)' : '')+'</li>' : '')+
+    '</ul><p>AI에게 추가 질문을 받는 것을 권합니다. 이 부분만 상황을 나눠 다시 묻는 설문 파일을 AI가 만들어 줍니다(5분 안팎). 생략하면 애매한 축은 지침에서 빠집니다.</p>'+
+    '<div class="actions"><button class="btn'+(pick !== "skip" ? ' primary' : '')+'" data-fu="want">추가 질문 받기(권장)</button><button class="btn'+(pick === "skip" ? ' primary' : '')+'" data-fu="skip">생략하기</button></div>'+
+    (pick ? '<div class="note">'+(pick === "want" ? '아래 결과 코드를 AI에게 붙여 넣으면 추가 질문 파일을 만들어 줍니다.' : '아래 결과 코드를 AI에게 붙여 넣으면 지금 결과로 반영안을 만듭니다.')+'</div>' : '')+
+    (canDeep ? '<p class="muted" style="margin-top:8px">AI 없이 바로 하려면 미리 준비된 상황별 질문을 할 수 있습니다. <button class="btn" id="deep-some">준비된 질문 하기</button></p>' : '')+
+    '</div>';
+}
+
+function finish(){
+  if (!state.ans.d) state.ans.d = new Date().toISOString().slice(0,16);
+  state.done = true; if (state.phase === 3) state.deepDone = true; store();
+  var res = PrefScore.score(BANK, state.ans);
+  var rel = res.reliability;
+  var sbLabel = rel.splitHalf===null ? "계산 안 됨" : rel.splitHalf>=0.7 ? "좋음" : rel.splitHalf>=0.5 ? "보통" : "낮음";
+  var ref = res.overall === "참고용";
+  var h = '<div id="report">'+
+    '<h1>나의 AI 대화 선호</h1>'+
+    '<p class="muted">'+esc(res.date)+' · 고르기 '+Object.keys(state.ans.ab).length+'문항(확인 문항 '+BANK.ab.filter(function(i){ return i.set === "a3" && state.ans.ab[i.id]; }).length+'개 포함)'+(Object.keys(state.ans.deep).length?' · 상황별 '+Object.keys(state.ans.deep).length+'문항':'')+(res.unsure.length?' · 고르지 못함 '+res.unsure.length+'개':'')+'</p>'+
+    '<div class="card"><h2>한눈에 <span class="badge '+gradeClass(res.overall)+'">'+res.overall+'</span></h2>'+
+    (res.summary.length ? '<p>가장 뚜렷한 선호: <b>'+res.summary.map(esc).join(" · ")+'</b></p>' : '<p>뚜렷한 선호가 나온 축이 없습니다.</p>')+
+    (ref ? '<div class="note">답이 한결같지 않아 이 결과는 참고만 하세요. 며칠 뒤 다시 해 보면 더 정확해집니다.</div>' : '')+
+    (rel.oneSide ? '<div class="note">'+rel.oneSide.total+'개 축 중 '+rel.oneSide.n+'개가 '+(rel.oneSide.side==="left"?"간결·직접":"자세히·친절")+' 쪽으로 나왔습니다. 한 가지 성향이 여러 축에 번졌을 수 있습니다. 지침을 넣은 뒤 전·후 답을 비교하는 검증을 꼭 해 보세요.</div>' : '')+
+    (rel.longBias ? '<div class="note">두 답 중 더 '+(rel.longSide==="long"?"긴":"짧은")+' 쪽을 주로 골랐습니다. 길이 축 말고 다른 축 결과에도 길이 취향이 섞였을 수 있습니다.</div>' : '')+
+    '</div>'+
+
+    '<div class="card"><h2>답이 얼마나 믿을 만한가</h2><table>'+
+    '<tr><td>반분 신뢰도<br><span class="muted">같은 축의 두 문항이 같은 쪽을 가리키는 정도(1에 가까울수록 좋음)</span></td><td>'+num(rel.splitHalf)+' · '+sbLabel+'</td></tr>'+
+    '<tr><td>다시 물은 문항<br><span class="muted">좌우를 바꿔 다시 물었을 때 같은 쪽을 고른 비율</span></td><td>'+pct(rel.retestAgree)+'</td></tr>'+
+    '<tr><td>집중 확인 문항</td><td>'+(rel.attention===null?"-":rel.attention?"통과":"실패")+'</td></tr>'+
+    '<tr><td>\'나\' 쪽을 고른 비율<br><span class="muted">20~80%면 한쪽만 누르는 습관이 없는 것</span></td><td>'+pct(rel.rightShare)+(rel.posBias?' · 치우침':'')+'</td></tr>'+
+    (rel.longShare!==null ? '<tr><td>더 긴 답을 고른 비율<br><span class="muted">길이 축이 아닌 문항에서. 길이 방향을 반반으로 섞어 두어 15~85%면 정상</span></td><td>'+pct(rel.longShare)+(rel.longBias?' · 쏠림':'')+'</td></tr>' : '')+
+    '<tr><td>\'조금\'을 고른 비율</td><td>'+pct(rel.mildShare)+'</td></tr>'+
+    (rel.unsureShare ? '<tr><td>"잘 모르겠다·둘 다 싫다" 비율<br><span class="muted">30%를 넘으면 종합을 한 단계 낮춘다</span></td><td>'+pct(rel.unsureShare)+'</td></tr>' : '')+
+    '<tr><td>너무 빨리 넘긴 문항<br><span class="muted">읽을 시간보다 빨리 고른 문항은 절반만 반영</span></td><td>'+rel.fast+'개</td></tr>'+
+    '</table><p class="muted" style="margin-top:8px">축이 11개라 반분 신뢰도는 거친 값입니다. 여러 축에서 가운데를 고르면 값이 낮게 나올 수 있습니다.</p></div>'+
+
+    '<div class="card profile"><h2>축별 위치</h2>'+profileRows(res.axes)+
+    '<div class="legend"><span>● 최종 위치(색: 신뢰 높음·보통·낮음)</span><span>▼ 말로 답한 선호</span><span>■ 고른 선호</span><span>옅은 띠: 답이 흔들린 폭</span></div></div>'+
+
+    (res.sayDiff.length ? '<div class="card"><h2>말과 선택이 다른 축</h2>'+res.sayDiff.map(function(a){
+      return '<p><b>'+esc(a.name)+'</b>: 말로는 "'+esc(a.S<0?a.left:a.right)+'" 쪽이 좋다고 했지만, 실제로는 "'+esc(a.R<0?a.left:a.right)+'" 쪽 답을 더 골랐습니다.</p>';
+    }).join("")+'<p class="muted">지침은 실제로 고른 쪽을 더 무겁게 반영했습니다.</p></div>' : '')+
+
+    deepSection(res)+
+
+    '<div class="card"><h2>말투</h2><table>'+res.tone.byContext.map(function(c){
+      return '<tr><td>'+esc(c.context)+'</td><td>'+(c.pick?STYLES[c.pick]:(c.shaky?"흔들림("+c.picks.map(function(p){return STYLES[p];}).join("·")+")":"-"))+'</td></tr>';
+    }).join("")+'</table></div>'+
+
+    '<div class="card"><h2>거슬린다고 한 것</h2>'+
+    (res.ox.filter(function(o){return o.dislike;}).length ? '<ul class="plain">'+res.ox.filter(function(o){return o.dislike;}).map(function(o){return '<li>'+esc(o.text)+'</li>';}).join("")+'</ul>' : '<p class="muted">없음</p>')+'</div>'+
+
+    openSection(res)+
+    unsureSection(res)+
+
+    (ref ? '<div class="card"><h2>지침 초안</h2><p>신뢰도가 낮아 지침 초안을 만들지 않았습니다.</p></div>'
+         : '<div class="card"><h2>지침 초안</h2><p class="muted">AI 설정 파일(CLAUDE.md 등)에 넣을 문장입니다. 넣기 전에 AI가 기존 지침과 겹치는지 확인합니다.</p><pre id="rules">'+esc(res.rules)+'</pre></div>')+
+    '</div>'+
+
+    followupCard(res)+
+
+    '<div class="card"><h2>결과 보내기</h2><p class="muted">결과 코드를 복사해 AI에게 붙여 넣으면 지침 파일에 넣을 안을 만들어 줍니다.</p>'+
+    '<textarea readonly class="code" id="code">만드는 중…</textarea>'+
+    '<div class="actions" style="margin-top:8px"><button class="btn primary" data-copy="code">결과 코드 복사</button>'+(ref?'':'<button class="btn" data-copy="rules">지침 복사</button>')+
+    '<button class="btn" id="dl-json">답 파일 저장</button><button class="btn" id="dl-html">보고서 저장</button><button class="btn" id="restart">처음부터 다시</button></div></div>';
+  app.innerHTML = h;
+  window.scrollTo(0,0);
+  makeCode(state.ans).then(function(c){ var el = document.getElementById("code"); if (el) el.value = c; });
+}
+
+// 결과 코드: 가능하면 압축(PS2), 아니면 그대로(PS1)
+function b64(bytes){ var s = ""; for (var i=0;i<bytes.length;i+=0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i+0x8000)); return btoa(s); }
+function makeCode(ans){
+  var json = JSON.stringify(ans);
+  var plain = function(){ return "PS1." + btoa(unescape(encodeURIComponent(json))); };
+  if (!window.CompressionStream) return Promise.resolve(plain());
+  try{
+    var cs = new Blob([json]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+    return new Response(cs).arrayBuffer().then(function(buf){ return "PS2." + b64(new Uint8Array(buf)); }, plain);
+  }catch(e){ return Promise.resolve(plain()); }
+}
+
+function copy(id, btn){
+  var el = document.getElementById(id), text = el.value !== undefined ? el.value : el.textContent;
+  if (!/^PS[12]\./.test(text) && id === "code") return;   // 아직 만드는 중
+  var ok = function(){ var t = btn.textContent; btn.textContent = "복사했습니다"; setTimeout(function(){ btn.textContent = t; }, 1500); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, fallback);
+  else fallback();
+  function fallback(){ try{ if (el.select) el.select(); else { var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); } document.execCommand("copy"); ok(); }catch(e){} }
+}
+function download(name, text, type){
+  var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], {type: type + ";charset=utf-8"}));
+  a.download = name; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function saveReport(){
+  var css = document.querySelector("style").outerHTML;
+  var body = document.getElementById("report").outerHTML;
+  download("선호진단_보고서.html", '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>AI 대화 선호 보고서</title>'+css+'</head><body><div class="wrap">'+body+'</div></body></html>', "text/html");
+}
+
+// 화면 검수용: #demo = 가상의 답으로 결과 화면, #demo-deep = 심층까지 마친 결과, #start = 저장 없이 첫 문항
+function demo(withDeep){
+  state = newState(); state.demo = true;
+  var prof = [-0.4,-1,0.1,-0.5,0.8,-1,-0.6,0.15,-0.1,0.05,-1], P = {};
+  BANK.axes.forEach(function(a, i){ P[a.id] = prof[i % prof.length]; });
+  function rOf(want, side){ var v = side === 0 ? want : -want; return v >= 0.75 ? 2 : v > 0 ? 1 : v <= -0.75 ? -2 : -1; }
+  BANK.ab.forEach(function(it){
+    if (it.set === "a3") return;
+    state.ans.ab[it.id] = { s: state.sides[it.id], r: rOf(P[it.axis] + (Math.random() - 0.5) * 0.6, state.sides[it.id]), t: 6000 };
+  });
+  var sk = BANK.ab.filter(function(i){ return i.set !== "a3"; });
+  state.ans.ab[sk[5].id] = { s: state.sides[sk[5].id], r: 0, u: 1, t: 5000 };
+  state.ans.ab[sk[17].id] = { s: state.sides[sk[17].id], r: 0, x: 1, note: "둘 다 깁니다. 숫자 한 줄이면 됩니다.", t: 7000 };
+  BANK.tone.items.forEach(function(it){ state.ans.tone[it.id] = { c: "formal", t: 4000 }; });
+  BANK.ox.forEach(function(o, i){ state.ans.ox[o.id] = i < 3 ? 1 : i === 3 ? 2 : 0; });
+  BANK.axes.forEach(function(a){ state.ans.sl[a.id] = Math.max(1, Math.min(PTS, Math.round((PTS+1)/2 + (PTS-1)/2 * P[a.id]))); });
+  state.ans.att = { s: 0, r: 1, t: 3000 };
+  state.reserve = []; state.phase = 2; state.queue = []; state.pos = 0;
+  if (withDeep){
+    var sitWant = { small: 0.8, outside: -0.9, money: -0.8, work: -0.6, "new": 0.7, hurry: -0.9, taste: -0.7, quality: 0.6, cost: 0.9, quick: -0.8, chat: -0.9, report: 0.6, learn: 0.7 };
+    state.deepSides = {};
+    DEEP.items.forEach(function(it){ var s = rside(); state.deepSides[it.id] = s; state.ans.deep[it.id] = { s: s, r: rOf(sitWant[it.sit] || 0.3, s), t: 6000 }; });
+    state.ans.open["open.autonomy"] = "파일 정리 같은 건 알아서 하고, 메일 보내기나 돈 쓰는 건 꼭 먼저 물어봐.";
+    state.ans.open["open.worst"] = "확인 안 한 걸 확인했다고 말할 때.";
+    state.phase = 3;
+  }
+  finish();
+}
+if (location.hash === "#demo") demo(false);
+else if (location.hash === "#demo-deep") demo(true);
+else if (location.hash === "#start"){ state = PRIOR ? followupState() : newState(); state.demo = true; render(); }
+else intro();
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# 사용자별 결과물: 수집 근거(사용자의 원래 말), 답, 추가 설문
+signals.md
+signals.json
+compose_log.md
+survey_r*.html
+선호진단_*.json
+결과코드_*.txt
+node_modules/
