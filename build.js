@@ -131,7 +131,9 @@ const L = bank.lex;
 if (L) {
   if (!L.read_prompt || !L.self_prompt) problems.push("용어: read_prompt·self_prompt가 있어야 함");
   if (!L.more || !/^lex\./.test(L.more.id || "") || !L.more.text) problems.push("용어: more(직접 적기)는 id가 'lex.'로 시작하고 text가 있어야 함");
-  if (L.concepts.length > 20) problems.push(`용어 묶음 ${L.concepts.length}개(20개까지 — 설문이 너무 길어진다)`);
+  if (L.concepts.length > 40) problems.push(`용어 묶음 ${L.concepts.length}개(40개까지 — 훑기 화면이 너무 길어진다)`);
+  if (!L.scan_prompt) problems.push("용어: scan_prompt(훑기 화면 질문)가 있어야 함");
+  L.concepts.forEach(c => { if (!(c.options || []).some(o => o.ai)) problems.push(`용어 ${c.id}: AI 버릇 말(ai: true)이 하나는 있어야 함(훑기 화면에 보일 말)`); });
   const cids = L.concepts.map(c => c.id);
   if (new Set(cids).size !== cids.length) problems.push("용어 묶음 id 중복");
   const allForms = [];
@@ -171,6 +173,10 @@ if (L) {
         if (h.length) problems.push(`용어 문항 ${it.id}: '${o.w}' 문장이 다른 말 '${z.w}'의 꼴 '${h[0].hit}'에 걸림`);
       });
     });
+  });
+  (L.watch || []).forEach(o => {
+    if (!o.w || !(o.forms || []).length) problems.push(`용어 후보(watch) ${o.w || "(이름 없음)"}: w·forms가 있어야 함`);
+    (o.forms || []).forEach(f => { if ([...f.replace(/^~/, "")].length < 2) problems.push(`용어 후보 ${o.w}: 꼴 '${f}'가 너무 짧음(2자 이상)`); });
   });
   (L.neg || []).forEach(t => {
     const h = G.findHits(t, allForms.map(x => ({ w: `${x.c}/${x.w}`, forms: [x.f] })));

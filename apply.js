@@ -91,7 +91,7 @@ res.ox.filter(o => o.dislike).forEach(o => items.push({ key: o.id, line: o.rule 
 // 용어: 한 묶음(머리 줄 + 말마다 한 줄). 말마다 [lex:말] 키로 뺄 수 있다
 const lexAll = res.lex.avoid.map(a => Object.assign({ key: "lex:" + a.w }, a));
 const lexKept = lexAll.filter(a => !skip.includes(a.key) && !skip.includes("lex"));
-const lexLine = a => `'${a.w}' → ${a.to ? `'${a.to}'` : "다른 말로 바꾼다"}`;
+const lexLine = a => `'${a.w}' → ${a.toSay ? a.toSay : a.to ? `'${a.to}'` : "다른 말로 바꾼다"}`;
 const kept = items.filter(it => !skip.includes(it.key));
 if (lexKept.length) kept.push({ key: "lex", line: res.lex.head, sub: lexKept.map(lexLine) });
 const unknown = skip.filter(k => k !== "lex" && !items.some(it => it.key === k) && !lexAll.some(a => a.key === k));
@@ -151,8 +151,8 @@ const lexFile = {
   made: `선호 진단 ${res.date}`, chat: chatMode, remind: true,
   exts: [".md", ".markdown", ".txt", ".rst", ".adoc"],
   skipPaths: ["/.claude/skills/preference-survey/"],
-  block: lexKept.filter(a => a.strong).map(a => ({ w: a.w, to: a.to, forms: a.forms })),
-  soft: lexKept.filter(a => !a.strong).map(a => ({ w: a.w, to: a.to }))
+  block: lexKept.filter(a => a.strong).map(a => ({ w: a.w, to: a.toSay || a.to, forms: a.forms })),
+  soft: lexKept.filter(a => !a.strong).map(a => ({ w: a.w, to: a.toSay || a.to }))
 };
 const guardCmd = `node "${guardPath}"`;
 out.push(`\n## 3. 용어 지키기 훅 — ${guardPath}`);

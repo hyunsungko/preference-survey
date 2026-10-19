@@ -56,7 +56,7 @@ if (res.lex.concepts.length || res.lex.user.length) {
   });
   if (res.lex.avoid.length) {
     console.log(`- 바꿔 쓸 말(막음 = 훅이 막고 바꿔 쓰게 함 / 지침만):`);
-    res.lex.avoid.forEach(a => console.log(`  - ${a.w} → ${a.to || "다른 말"} [${a.strong ? "막음" : "지침만"} · ${a.why}${a.user && a.forms.length === 1 && a.forms[0] === a.w ? " · 적은 꼴 그대로만 찾음(활용형은 AI가 꼴을 더한다)" : ""}]`));
+    res.lex.avoid.forEach(a => console.log(`  - ${a.w} → ${a.toSay || a.to || "다른 말"} [${a.strong ? "막음" : "지침만"} · ${a.why}${a.user && a.forms.length === 1 && a.forms[0] === a.w ? " · 적은 꼴 그대로만 찾음(활용형은 AI가 꼴을 더한다)" : ""}]`));
   }
 }
 if (res.open.length) {

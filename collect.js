@@ -84,7 +84,7 @@ let LEXB = null;
 try { LEXB = JSON.parse(fs.readFileSync(path.join(opt("--bank") ? path.resolve(opt("--bank")) : __dirname, "lex.json"), "utf8")); }
 catch (e) { try { LEXB = JSON.parse(fs.readFileSync(path.join(__dirname, "lex.json"), "utf8")); } catch (e2) { LEXB = null; } }
 const G = require("./lex_guard.js");
-const lexUsage = { user: {}, ai: {} };
+const lexUsage = { user: {}, ai: {}, watch: {} };
 function countLex(text, who) {
   if (!LEXB || !text) return;
   LEXB.concepts.forEach(c => c.options.forEach(o => {
@@ -92,6 +92,12 @@ function countLex(text, who) {
     const u = lexUsage[who][c.id] = lexUsage[who][c.id] || {};
     u[o.w] = (u[o.w] || 0) + 1;   // 한 메시지에 여러 번 나와도 한 번으로 센다
   }));
+  // 설문 묶음 밖의 후보 말(watch): 2단계에서 AI가 묶음으로 더할지 정한다
+  (LEXB.watch || []).forEach(o => {
+    if (!G.findHits(text, [o]).length) return;
+    const u = lexUsage.watch[o.w] = lexUsage.watch[o.w] || { user: 0, ai: 0 };
+    u[who]++;
+  });
 }
 
 const said = new Map();   // 같은 말은 한 번만
@@ -266,6 +272,10 @@ async function main() {
       const fmt = who => c.options.map(op => `${op.w} ${(lexUsage[who][c.id] || {})[op.w] || 0}`).join(" · ");
       o.push(`- ${c.name}: 사람 ${fmt("user")} / AI ${fmt("ai")}`);
     });
+    const w = Object.entries(lexUsage.watch).sort((a, b) => (b[1].ai - b[1].user) - (a[1].ai - a[1].user)).filter(([, v]) => v.ai);
+    o.push(`\n## 5. 설문 밖의 후보 말: AI가 쓴 말(메시지 수, AI가 사람보다 많이 쓴 순)`);
+    o.push(w.length ? "AI가 자주 쓰고 사람은 거의 안 쓰는 말은 2단계에서 묶음으로 만든다(설계원칙.md 5절). 이 목록에 없는 말도 AI가 스스로 자주 쓴다고 보이면 더한다." : "AI 답에서 후보 말이 나오지 않았다.");
+    w.forEach(([k, v]) => o.push(`- ${k}: AI ${v.ai} · 사람 ${v.user}`));
   }
   o.push(`\n## 다음\nAI는 이 파일과 설계원칙.md를 읽고 문항을 짠다(SKILL.md 2단계). 이 파일에는 사용자의 원래 말이 들어 있으므로 폴더 밖으로 보내지 않고, git 저장소 안이면 .gitignore에 넣는다.`);
   fs.writeFileSync(path.join(outDir, "signals.md"), o.join("\n") + "\n");

@@ -11,7 +11,8 @@
  *   sl[axis] = 1~N        말로 답한 선호(1=왼쪽 극, N=오른쪽 극, N=bank.slider_points)
  *   att      = {s, r, t}  집중 확인 문항
  *   open[id] = "글"       주관식(자동 채점하지 않음). open["lex.more"]의 '바꿀 말 → 쓸 말' 줄은 용어 규칙으로 읽는다
- *   lex[id]  = {c, x, t}  용어 고르기. c: 고른 말(options[].w) 또는 "any"(다 비슷하다) / x: 거슬린다고 표시한 말들
+ *   lexScan  = {묶음: [말]}  용어 훑기에서 거슬린다고 고른 AI 버릇 말. 있으면 훑기를 한 답이고, 고르지 않은 묶음은 자연스럽다고 본다
+ *   lex[id]  = {c, x, t}  용어 고르기(훑기에서 고른 묶음만). c: 고른 말(options[].w) 또는 "any"(다 비슷하다) / x: 거슬린다고 표시한 말들
  *   b        = 문항 은행 id(사용자에 맞게 짠 은행이면 그 id)
  * 점수는 -1(왼쪽 극) ~ +1(오른쪽 극). |점수| < 0.25는 "가운데".
  */
@@ -205,17 +206,22 @@
   function lexResult(bank, ans, opts) {
     var L = bank.lex;
     var usage = (opts && opts.usage && opts.usage.user) || {};
-    var concepts = [];
+    var concepts = [], natural = [], scan = ans.lexScan || null;
     if (L) L.concepts.forEach(function (c) {
       var ws = c.options.map(function (o) { return o.w; });
       var picks = {}, x = {}, n = 0;
+      var flags = scan ? (scan[c.id] || []).filter(function (w) { return ws.indexOf(w) >= 0; }) : [];
+      flags.forEach(function (w) { x[w] = (x[w] || 0) + 1; });   // 훑기에서 거슬린다고 고른 것도 거슬림 한 번으로 센다
       L.items.forEach(function (it) {
         if (it.concept !== c.id) return;
         var a = ans.lex && ans.lex[it.id]; if (!a) return;
         n++; picks[it.kind] = a.c;
         (a.x || []).forEach(function (w) { if (w !== a.c && ws.indexOf(w) >= 0) x[w] = (x[w] || 0) + 1; });
       });
-      if (!n) return;
+      if (!n && !flags.length) {   // 훑기에서 고르지 않았고 자세히 묻지도 않음 → 자연스럽다고 보고 그대로 둔다
+        if (scan) c.options.forEach(function (o) { if (o.ai) natural.push(o.w); });
+        return;
+      }
       var real = function (w) { return w && ws.indexOf(w) >= 0 ? w : null; };
       var r = real(picks.read), s = real(picks.self), u = usage[c.id] || {};
       var prefer = null, conf = null, how;
@@ -225,6 +231,7 @@
         if (hi >= 2 && hi >= 2 * lo) { prefer = ur > us ? r : s; conf = "보통"; how = "고른 말이 엇갈려 기록에서 더 자주 쓴 말"; }
         else how = "흔들림(읽기 " + r + " · 쓰기 " + s + ")";
       } else if (r || s) { prefer = r || s; conf = "보통"; how = r ? "읽기에서만 고름" : "쓰기에서만 고름"; }
+      else if (!n) how = "훑기에서만 거슬림(자세히 묻지 못함)";
       else how = "다 비슷하다";
       if (prefer && x[prefer]) { prefer = null; conf = null; how = "흔들림(고른 말을 거슬린다고도 표시)"; }
       var alt = function (w) {
@@ -236,8 +243,13 @@
         if (o.w === prefer) return;
         var forms = o.forms || [];
         // AI 버릇 말은 한 번만 거슬린다고 해도 막는다. 흔한 말(확인하다·보이다 등)은 두 문항 모두에서 거슬린다고 해야 막고, 한 번이면 지침에만 넣는다
-        if (x[o.w]) avoid.push({ w: o.w, to: prefer || alt(o.w), forms: forms, strong: forms.length > 0 && (!!o.ai || x[o.w] >= 2),
-                                 why: o.ai || x[o.w] >= 2 ? "거슬린다고 표시" : "한 문항에서만 거슬린다고 표시" });
+        //   훑기에서만 거슬린다고 하고 자세히 묻지 못했으면(쓸 말을 못 정함) 지침에만 넣는다
+        //   자세히 물었을 때 그 말을 고른 만큼 거슬림을 무른다: 두 번 다 고르면 넣지 않고(훑기 표시보다 고른 것을 믿는다), 한 번 고르면 지침만
+        var chose = (picks.read === o.w ? 1 : 0) + (picks.self === o.w ? 1 : 0);
+        if (chose === 2) return;
+        var sure = n > 0 && chose === 0 && (!!o.ai || x[o.w] >= 2);
+        if (x[o.w]) avoid.push({ w: o.w, to: prefer || alt(o.w), forms: forms, strong: forms.length > 0 && sure,
+                                 why: !n ? "훑기에서만 거슬린다고 표시" : chose ? "거슬린다고 했지만 한 문항에서는 그 말을 고름" : sure ? "거슬린다고 표시" : "한 문항에서만 거슬린다고 표시" });
         else if (o.ai && prefer && conf === "높음") avoid.push({ w: o.w, to: prefer, forms: forms, strong: false, why: "다른 말을 골라서" });
       });
       concepts.push({ id: c.id, name: c.name, read: picks.read || null, self: picks.self || null, prefer: prefer, conf: conf, how: how,
@@ -256,9 +268,13 @@
       if (!same) all.push(e);
       else { same.strong = same.forms.length > 0; same.to = e.to || same.to; same.why = "직접 적음"; }
     });
-    var lines = all.map(function (a) { return "'" + a.w + "' → " + (a.to ? "'" + a.to + "'" : "다른 말로 바꾼다"); });
-    return { concepts: concepts, user: user, avoid: all, lines: lines, head: LEX_HEAD,
-             unclear: concepts.filter(function (c) { return !c.prefer && c.how !== "다 비슷하다"; }) };
+    // 바꿀 말이 낱말이 아니라 쓰는 방식(say가 있는 말)이면 따옴표 없이 그 문장을 쓴다
+    var sayOf = {};
+    if (L) L.concepts.forEach(function (c) { c.options.forEach(function (o) { if (o.say) sayOf[o.w] = o.say; }); });
+    all.forEach(function (a) { if (a.to && sayOf[a.to]) { a.toSay = sayOf[a.to]; } });
+    var lines = all.map(function (a) { return "'" + a.w + "' → " + (a.toSay ? a.toSay : a.to ? "'" + a.to + "'" : "다른 말로 바꾼다"); });
+    return { concepts: concepts, user: user, avoid: all, lines: lines, head: LEX_HEAD, natural: natural,
+             unclear: concepts.filter(function (c) { return !c.prefer && c.how !== "다 비슷하다" && !/^훑기에서만/.test(c.how); }) };
   }
 
   function score(bank, ans, opts) {
