@@ -1,4 +1,4 @@
-/* score.js — AI 대화 선호 진단 채점 (브라우저·Node 공용, v1.2 2026-10-02)
+/* score.js — AI 대화 선호 진단 채점 (브라우저·Node 공용, v1.3 2026-10-19)
  *
  * bank = items.json 내용 + bank.deep(deep.json 내용)
  * 응답 형식(answers)
@@ -10,7 +10,8 @@
  *   ox[id]   = 1(거슬린다) | 0(괜찮다) | 2(잘 모르겠다)
  *   sl[axis] = 1~N        말로 답한 선호(1=왼쪽 극, N=오른쪽 극, N=bank.slider_points)
  *   att      = {s, r, t}  집중 확인 문항
- *   open[id] = "글"       주관식(자동 채점하지 않음)
+ *   open[id] = "글"       주관식(자동 채점하지 않음). open["lex.more"]의 '바꿀 말 → 쓸 말' 줄은 용어 규칙으로 읽는다
+ *   lex[id]  = {c, x, t}  용어 고르기. c: 고른 말(options[].w) 또는 "any"(다 비슷하다) / x: 거슬린다고 표시한 말들
  *   b        = 문항 은행 id(사용자에 맞게 짠 은행이면 그 id)
  * 점수는 -1(왼쪽 극) ~ +1(오른쪽 극). |점수| < 0.25는 "가운데".
  */
@@ -103,12 +104,17 @@
 
   // 길이 축이 아닌 문항에서 두 답의 글자 수가 2자 이상 다르면 긴 쪽을 골랐는지 센다.
   // 문항은 축마다 길이 방향을 반반으로 섞어 두었으므로, 한쪽으로 크게 쏠리면 길이만 보고 고른 것이다.
+  //   이모지·결론 순서·단정 정도 축은 한쪽에 말이 붙어 늘 오른쪽이 길다(build.js가 방향 규칙에서 뺀다). 여기서도 빼야 길이 취향이 섞이지 않는다
+  var EXEMPT = ["length", "emoji", "order", "hedge"];
+  function clen(s) { return Array.from(String(s || "")).length; }   // build.js와 같이 코드 포인트로 센다(이모지 하나 = 한 글자)
   function lengthPull(bank, ans) {
     var n = 0, longer = 0;
+    var exempt = {};
+    bank.axes.forEach(function (ax) { if (EXEMPT.indexOf(ax.id) >= 0 || ax.exempt) exempt[ax.id] = 1; });
     bank.ab.forEach(function (it) {
-      if (it.axis === "length") return;
+      if (exempt[it.axis]) return;
       var a = ans.ab && ans.ab[it.id]; if (!a) return;
-      var dl = it.right.length - it.left.length;
+      var dl = clen(it.right) - clen(it.left);
       if (Math.abs(dl) < 2) return;
       var s = poleScore(a); if (s === null) return;
       n++; if (sign(s) === sign(dl)) longer++;
@@ -177,6 +183,84 @@
     return out;
   }
 
+
+  // 용어 고르기: 낱말 묶음마다 읽기(read)·쓰기(self) 고른 말을 맞춰 보고, 바꿔 쓸 말(avoid)을 정한다.
+  //   쓸 말(prefer): 두 문항에서 같은 말 → 신뢰 높음 / 한 문항만 고름(다른 하나는 '다 비슷하다') → 보통
+  //                  두 문항이 엇갈리면 1단계 기록에서 실제로 더 자주 쓴 말(2번 이상, 다른 말의 2배 이상), 아니면 정하지 않음(흔들림)
+  //   막을 말(strong): 거슬린다고 표시한 AI 버릇 말, 또는 두 문항 모두에서 거슬린다고 한 흔한 말. 꼴(forms)이 있어야 훅이 찾을 수 있다
+  //   피할 말(strong 아님): 신뢰 높게 다른 말을 고른 묶음의 AI 버릇 말(ai). 지침에만 넣고 막지는 않는다
+  var LEX_HEAD = "용어: 아래 말은 바꿔 쓴다. 인용, 코드, 고유 이름, 사용자의 말을 옮길 때는 그대로 둔다.";
+  function parseLexMore(text) {
+    var out = [];
+    String(text || "").split(/\n|[,;／/]/).forEach(function (line) {
+      var l = line.trim().replace(/^[-*•]\s*/, ""); if (!l) return;
+      var q = "['\"‘’“”]?";
+      var m = l.match(new RegExp("^" + q + "(.+?)" + q + "\\s*(?:->|→|=>|⇒|대신에?|말고)\\s*" + q + "(.+?)" + q + "(?:\\s*(?:으로|로)\\s*(?:써\\s*줘|써줘|써|쓰기|쓴다|바꿔\\s*줘|바꿔줘|바꿔|해\\s*줘|해줘))?\\s*[.!]?$"));
+      if (m) { out.push({ w: m[1].trim(), to: m[2].trim() }); return; }
+      m = l.match(new RegExp("^" + q + "(.+?)" + q + "\\s*(?:는|은|이|가|을|를)?\\s*(?:쓰지\\s*마|쓰지\\s*말|금지|싫)"));
+      if (m) out.push({ w: m[1].trim(), to: null });
+    });
+    return out.filter(function (e) { return e.w && e.w.length <= 20 && e.w !== e.to; });
+  }
+  function lexResult(bank, ans, opts) {
+    var L = bank.lex;
+    var usage = (opts && opts.usage && opts.usage.user) || {};
+    var concepts = [];
+    if (L) L.concepts.forEach(function (c) {
+      var ws = c.options.map(function (o) { return o.w; });
+      var picks = {}, x = {}, n = 0;
+      L.items.forEach(function (it) {
+        if (it.concept !== c.id) return;
+        var a = ans.lex && ans.lex[it.id]; if (!a) return;
+        n++; picks[it.kind] = a.c;
+        (a.x || []).forEach(function (w) { if (w !== a.c && ws.indexOf(w) >= 0) x[w] = (x[w] || 0) + 1; });
+      });
+      if (!n) return;
+      var real = function (w) { return w && ws.indexOf(w) >= 0 ? w : null; };
+      var r = real(picks.read), s = real(picks.self), u = usage[c.id] || {};
+      var prefer = null, conf = null, how;
+      if (r && s && r === s) { prefer = r; conf = "높음"; how = "읽기·쓰기 모두"; }
+      else if (r && s) {
+        var ur = u[r] || 0, us = u[s] || 0, hi = Math.max(ur, us), lo = Math.min(ur, us);
+        if (hi >= 2 && hi >= 2 * lo) { prefer = ur > us ? r : s; conf = "보통"; how = "고른 말이 엇갈려 기록에서 더 자주 쓴 말"; }
+        else how = "흔들림(읽기 " + r + " · 쓰기 " + s + ")";
+      } else if (r || s) { prefer = r || s; conf = "보통"; how = r ? "읽기에서만 고름" : "쓰기에서만 고름"; }
+      else how = "다 비슷하다";
+      if (prefer && x[prefer]) { prefer = null; conf = null; how = "흔들림(고른 말을 거슬린다고도 표시)"; }
+      var alt = function (w) {
+        var o = c.options.filter(function (z) { return z.w !== w && !x[z.w] && !z.ai; })[0];
+        return o ? o.w : null;
+      };
+      var avoid = [];
+      c.options.forEach(function (o) {
+        if (o.w === prefer) return;
+        var forms = o.forms || [];
+        // AI 버릇 말은 한 번만 거슬린다고 해도 막는다. 흔한 말(확인하다·보이다 등)은 두 문항 모두에서 거슬린다고 해야 막고, 한 번이면 지침에만 넣는다
+        if (x[o.w]) avoid.push({ w: o.w, to: prefer || alt(o.w), forms: forms, strong: forms.length > 0 && (!!o.ai || x[o.w] >= 2),
+                                 why: o.ai || x[o.w] >= 2 ? "거슬린다고 표시" : "한 문항에서만 거슬린다고 표시" });
+        else if (o.ai && prefer && conf === "높음") avoid.push({ w: o.w, to: prefer, forms: forms, strong: false, why: "다른 말을 골라서" });
+      });
+      concepts.push({ id: c.id, name: c.name, read: picks.read || null, self: picks.self || null, prefer: prefer, conf: conf, how: how,
+                      disliked: Object.keys(x), avoid: avoid, used: u });
+    });
+    var user = parseLexMore(ans.open && ans.open[(L && L.more && L.more.id) || "lex.more"]).map(function (e) {
+      // 용어 묶음에 있는 말이면 그 활용형(forms)으로 찾는다('재다'라고 적어도 '재 보니'·'잰'을 잡게). 없는 말은 적은 그대로 찾는다
+      var known = null;
+      if (L) L.concepts.forEach(function (c) { c.options.forEach(function (o) { if (o.w === e.w && (o.forms || []).length) known = o; }); });
+      return { w: e.w, to: e.to, forms: known ? known.forms : [e.w], strong: true, why: "직접 적음", user: true };
+    });
+    var all = [];
+    concepts.forEach(function (c) { c.avoid.forEach(function (a) { all.push(a); }); });
+    user.forEach(function (e) {   // 직접 적은 말이 이미 '피할 말'이면 막을 말로 올리고, 적은 쓸 말을 따른다
+      var same = all.filter(function (a) { return a.w === e.w; })[0];
+      if (!same) all.push(e);
+      else { same.strong = same.forms.length > 0; same.to = e.to || same.to; same.why = "직접 적음"; }
+    });
+    var lines = all.map(function (a) { return "'" + a.w + "' → " + (a.to ? "'" + a.to + "'" : "다른 말로 바꾼다"); });
+    return { concepts: concepts, user: user, avoid: all, lines: lines, head: LEX_HEAD,
+             unclear: concepts.filter(function (c) { return !c.prefer && c.how !== "다 비슷하다"; }) };
+  }
+
   function score(bank, ans, opts) {
     opts = opts || {};
     var axes = bank.axes.map(function (ax) { return axisResult(bank, ans, ax); });
@@ -231,6 +315,8 @@
       else if (d.rules.length) { lines.push("- " + d.head); d.rules.forEach(function (r) { lines.push("  - " + r); }); }
     });
     ox.filter(function (o) { return o.dislike; }).forEach(function (o) { lines.push("- " + o.rule); });
+    var lex = lexResult(bank, ans, opts);
+    if (lex.lines.length) { lines.push("- " + lex.head); lex.lines.forEach(function (l) { lines.push("  - " + l); }); }
     var rules = ["## 대화 선호 (선호 진단 " + date + ", 신뢰도 " + overall + ")", ""].concat(lines).join("\n");
 
     var unsure = [];
@@ -261,7 +347,7 @@
         longShare: lp.share, longN: lp.n, longBias: lp.bias, longSide: lp.side, oneSide: oneSide,
         unsureShare: unsureShare
       },
-      axes: axes, tone: tone, ox: ox, deep: deep, open: open, unsure: unsure,
+      axes: axes, tone: tone, ox: ox, deep: deep, lex: lex, open: open, unsure: unsure,
       followup: { axes: followAxes, items: pendingN, recommend: followAxes.length > 0 || pendingN >= 3 },
       summary: (strong.length ? strong : clear).slice(0, 3).map(function (a) { return a.pole + "(" + a.strength + ")"; }),
       sayDiff: axes.filter(function (a) { return a.sayDiff; }),
@@ -280,6 +366,6 @@
     return { r: pearson(f1, f2), changed: changed, same: f1.length - changed.length, total: f1.length };
   }
 
-  var api = { score: score, compare: compare, needsReserve: needsReserve, poleScore: poleScore, minMs: minMs, sliderScore: sliderScore };
+  var api = { score: score, compare: compare, needsReserve: needsReserve, poleScore: poleScore, minMs: minMs, sliderScore: sliderScore, parseLexMore: parseLexMore };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.PrefScore = api;
 })(this);

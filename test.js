@@ -1,4 +1,4 @@
-// test.js — 가상 응답자로 채점·신뢰도 장치·심층 설문을 시험한다.  node test.js
+// test.js — 가상 응답자로 채점·신뢰도 장치·심층 설문·용어 고르기·용어 지키기 훅·반영(apply)을 시험한다.  node test.js
 const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
@@ -6,6 +6,7 @@ const { execFileSync } = require("child_process");
 const S = require("./score.js");
 const bank = JSON.parse(fs.readFileSync(path.join(__dirname, "items.json"), "utf8"));
 bank.deep = JSON.parse(fs.readFileSync(path.join(__dirname, "deep.json"), "utf8"));
+bank.lex = JSON.parse(fs.readFileSync(path.join(__dirname, "lex.json"), "utf8"));
 const PTS = bank.slider_points || 7, MIDP = (PTS + 1) / 2;
 
 let seed = 7;
@@ -76,6 +77,9 @@ function check(name, cond) { console.log((cond ? "  통과 " : "  실패 ") + na
   if (kind === "longLover" || kind === "shortLover") {
     check(`길이만 보고 고른 사람(${kind}): 쏠림 감지(${rel.longSide}, ${(rel.longShare * 100).toFixed(0)}%, 문항 ${rel.longN})`, rel.longBias === true && rel.longSide === (kind === "longLover" ? "long" : "short"));
     check(`길이만 보고 고른 사람(${kind}): 믿을 만함이 아님(지금 ${res.overall})`, res.overall !== "믿을 만함");
+    const EX = ["length", "emoji", "order", "hedge"], L = x => [...x].length;
+    const want = bank.ab.filter(i => !EX.includes(i.axis) && Math.abs(L(i.right) - L(i.left)) >= 2).length;
+    check(`긴 답 쏠림은 방향 규칙에서 뺀 축(이모지·결론 순서·단정)을 세지 않음(${rel.longN}문항 = ${want})`, rel.longN === want);
   }
 });
 
@@ -229,7 +233,9 @@ fs.writeFileSync(path.join(pj, "s1.jsonl"), [
   u("Another Claude session sent a message: 앞으로 짧게 보고하지 마", { origin: { kind: "peer" } }),
   u('<channel source="t" chat_id="2" user="a" user_id="111" ts="x">앞으로 목록 말고 문장으로 써</channel>\n<channel source="t" chat_id="2" user="b" user_id="222" ts="x">항상 같은 말 반복하지 마 짜증나</channel>', { isMeta: true, origin: { kind: "channel" } }),
   u('<pasted_content id="ab">동료: 앞으로 항상 이모지 쓰지 마</pasted_content> 이거 참고해서 정리해줘 짧게 말고 자세히', { origin: { kind: "human" } }),
-  u('앞으로 결론 먼저 말해 <system-reminder>앞으로 말투는 반말로 하지 마</system-reminder>', { origin: { kind: "human" } })
+  u('앞으로 결론 먼저 말해 <system-reminder>앞으로 말투는 반말로 하지 마</system-reminder>', { origin: { kind: "human" } }),
+  u("응답 시간 측정해서 알려 줘", { origin: { kind: "human" } }),
+  JSON.stringify({ type: "assistant", timestamp: iso, message: { role: "assistant", content: [{ type: "text", text: "세 축으로 나눠 재 보니 이렇습니다." }] } })
 ].join("\n"));
 fs.writeFileSync(path.join(pj, "memory", "feedback_x.md"), "---\nname: x\ndescription: 용어를 지어내지 않는다\nmetadata:\n  type: feedback\n---\n본문");
 fs.writeFileSync(path.join(cd, "CLAUDE.md"), "## 대화 선호\n- 내 비번 pass123! 기억해\n- 결론 먼저 쓴다.\n");
@@ -250,10 +256,128 @@ check("지난 진단 결과의 비밀 줄도 뺌", sig.prevResult && !JSON.strin
 check("끊어진 정션이 있어도 수집이 끝까지 감", fs.existsSync(path.join(sigDir, "signals.md")));
 check("다른 세션이 보낸 말은 뺌", !saidText.includes("Another Claude"));
 check("비밀번호가 든 문장은 뺌", !saidText.includes("비밀번호"));
+check("용어: 사람이 쓴 말과 AI가 쓴 말을 따로 셈", sig.lexUsage.user.measure["측정하다"] === 1 && sig.lexUsage.ai.measure["재다"] === 1 && sig.lexUsage.ai.axis["축"] === 1 && !(sig.lexUsage.user.axis || {})["축"]);
+check("AI가 쓴 글은 모으지 않음(횟수만)", !saidText.includes("재 보니"));
 check("피드백 기억을 모음", sig.feedback.length === 1 && sig.feedback[0].text.includes("지어내지"));
 const emptyDir = path.join(tmp, "empty"); fs.mkdirSync(path.join(emptyDir, "projects"), { recursive: true });
 node([path.join(__dirname, "collect.js"), "--claude-dir", emptyDir, "--out", path.join(tmp, "sig0"), "--project", emptyDir]);
 check("근거가 없으면 기본 문항을 쓰라고 적음", fs.readFileSync(path.join(tmp, "sig0", "signals.md"), "utf8").includes("근거 없음"));
+
+// 용어 고르기: 읽기·쓰기에서 고른 말, 거슬림 표시, 기록의 사용 횟수, 직접 적은 말 → 바꿔 쓸 말
+console.log("\n[용어 고르기]");
+const LX = bank.lex;
+const lexAns = picks => { const a = respondent("consistent", profile); a.lex = {}; Object.keys(picks).forEach(id => { a.lex[id] = picks[id]; }); return a; };
+const la = lexAns({
+  "measure.r": { c: "측정하다", x: ["재다"], t: 3000 }, "measure.s": { c: "측정하다", x: [], t: 3000 },
+  "axis.r": { c: "기준", x: [], t: 3000 }, "axis.s": { c: "기준", x: [], t: 3000 },
+  "point.r": { c: "지적하다", x: [], t: 3000 }, "point.s": { c: "언급하다", x: [], t: 3000 },
+  "surface.r": { c: "나타나다", x: ["보이다"], t: 3000 }, "surface.s": { c: "any", x: [], t: 3000 },
+  "look.r": { c: "살펴보다", x: ["검토하다"], t: 3000 }, "look.s": { c: "살펴보다", x: ["검토하다"], t: 3000 }
+});
+la.open["lex.more"] = "재다 → 측정하다\n레버리지 → 활용\n컨펌 쓰지 마";
+const lr = S.score(bank, la).lex;
+const cOf = id => lr.concepts.find(c => c.id === id), avOf = w => lr.avoid.find(a => a.w === w);
+check("읽기·쓰기 모두 같은 말이면 쓸 말(신뢰 높음)", cOf("measure").prefer === "측정하다" && cOf("measure").conf === "높음");
+check("거슬린다고 한 AI 버릇 말은 막음(재다 → 측정하다)", avOf("재다") && avOf("재다").strong && avOf("재다").to === "측정하다");
+check("거슬린다고 하지 않았어도 다른 말을 신뢰 높게 고른 묶음의 AI 버릇 말은 지침만(축 → 기준)", avOf("축") && !avOf("축").strong && avOf("축").to === "기준");
+check("AI 버릇 말이 아닌 흔한 말은 고르지 않았다고 피하지 않음(확인하다)", !avOf("확인하다"));
+check("읽기·쓰기가 엇갈리고 기록이 없으면 정하지 않음(흔들림)", cOf("point").prefer === null && /흔들림/.test(cOf("point").how) && lr.unclear.some(c => c.id === "point"));
+const lrU = S.score(bank, la, { usage: { user: { point: { "지적하다": 4, "언급하다": 1 } } } }).lex;
+check("엇갈려도 기록에서 실제로 더 자주 쓴 말이 있으면 그 말(신뢰 보통)", lrU.concepts.find(c => c.id === "point").prefer === "지적하다" && lrU.concepts.find(c => c.id === "point").conf === "보통");
+check("한쪽만 고르고 다른 쪽은 '다 비슷하다'면 신뢰 보통", cOf("surface").prefer === "나타나다" && cOf("surface").conf === "보통");
+check("흔한 말은 한 문항에서만 거슬린다고 하면 막지 않고 지침만(보이다)", avOf("보이다") && !avOf("보이다").strong);
+check("흔한 말도 두 문항 모두 거슬린다고 하면 막음(검토하다)", avOf("검토하다") && avOf("검토하다").strong);
+check("직접 적은 말: '바꿀 말 → 쓸 말'과 '쓰지 마'를 읽어 막음", avOf("레버리지") && avOf("레버리지").to === "활용" && avOf("레버리지").strong && avOf("컨펌") && avOf("컨펌").to === null);
+check("직접 적은 말이 묶음에 있는 말이면 그 활용형으로 찾음", avOf("재다").forms.includes("잰 "));
+const lrules = S.score(bank, la).rules;
+check("지침 초안에 용어 규칙이 들어감", lrules.includes("- 용어: 아래 말은 바꿔 쓴다") && lrules.includes("  - '재다' → '측정하다'"));
+check("고른 말을 같은 문항에서 거슬린다고도 누르면 거슬림에서 뺌", (() => { const a = lexAns({ "measure.r": { c: "재다", x: ["재다"], t: 3000 } }); return !S.score(bank, a).lex.avoid.some(v => v.w === "재다"); })());
+check("용어 답이 없으면 용어 규칙도 없음", !S.score(bank, respondent("consistent", profile)).rules.includes("용어:"));
+
+// 용어 지키기 훅
+console.log("\n[용어 지키기 훅]");
+const G = require("./lex_guard.js");
+const blockList = [{ w: "재다", to: "측정하다", forms: LX.concepts[0].options[0].forms }, { w: "축", to: "기준", forms: LX.concepts[2].options[0].forms }, { w: "~을 통해", to: "~(으)로", forms: LX.concepts[11].options[0].forms }];
+check("활용형을 찾음(재 보니·잰·쟀다)", ["시간을 재 보니 2초", "따로 잰 결과", "어제 쟀다"].every(t => G.findHits(t, blockList).length === 1));
+check("다른 낱말 안의 같은 글자는 찾지 않음(현재는·재고·축하·축의금·건축)", ["현재는 괜찮다", "재고가 남았다", "생일 축하해요", "축의금을 냈다", "건축 허가"].every(t => !G.findHits(t, blockList).length));
+check("인용·코드·링크·'>' 인용 줄 안의 말은 찾지 않음", !G.findHits("'재다'는 쓰지 않는다. `축으로` 코드\n> 세 축으로 봤다\n\"재 보니\" https://x.y/축으로", blockList).length);
+check("앞말에 붙는 꼴(~을 통해)을 찾음", G.findHits("설문을 통해 모았다", blockList).length === 1);
+const preMd = G.run({ hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: "/w/보고.md", content: "가격, 속도 세 축으로 봤습니다." } }, { block: blockList });
+check("글 파일에 막을 말을 쓰면 막고(exit 2) 바꿀 말을 알려 줌", preMd.code === 2 && preMd.stderr.includes("'기준'") && preMd.stderr.includes("축으로"));
+check("코드 파일은 검사하지 않음", G.run({ hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: "/w/a.js", content: "// 세 축으로" } }, { block: blockList }).code === 0);
+check("Edit·MultiEdit은 새로 쓰는 글만 봄", G.run({ hook_event_name: "PreToolUse", tool_name: "Edit", tool_input: { file_path: "/w/a.md", old_string: "세 축으로", new_string: "세 기준으로" } }, { block: blockList }).code === 0 &&
+  G.run({ hook_event_name: "PreToolUse", tool_name: "MultiEdit", tool_input: { file_path: "/w/a.md", edits: [{ old_string: "x", new_string: "열 번 재 보니" }] } }, { block: blockList }).code === 2);
+check("skipPaths(이 스킬 폴더)는 검사하지 않음", G.run({ hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: "/h/.claude/skills/preference-survey/설계.md", content: "세 축으로" } }, { block: blockList, skipPaths: ["/.claude/skills/preference-survey/"] }).code === 0);
+const tr = path.join(tmp, "tr.jsonl");
+const trLine = (type, content, extra) => JSON.stringify(Object.assign({ type, message: { role: type, content } }, extra || {}));
+fs.writeFileSync(tr, [
+  trLine("user", "지난 질문"), trLine("assistant", [{ type: "text", text: "예전 답: 세 축으로 봤습니다." }]),
+  trLine("user", "이번 질문"), trLine("assistant", [{ type: "text", text: "확인하겠습니다." }, { type: "tool_use", id: "1", name: "Read", input: {} }]),
+  trLine("user", [{ type: "tool_result", tool_use_id: "1", content: "..." }]), trLine("assistant", [{ type: "text", text: "열 번 재 보니 평균 2초였습니다." }])
+].join("\n"));
+const stop = G.run({ hook_event_name: "Stop", transcript_path: tr, stop_hook_active: false }, { block: blockList });
+const stopJ = stop.stdout ? JSON.parse(stop.stdout) : {};
+check("채팅 답에 막을 말이 있으면 되돌려 다시 쓰게 함(Stop decision=block)", stopJ.decision === "block" && stopJ.reason.includes("'측정하다'"));
+check("이번 턴의 답만 봄(지난 턴의 '축으로'는 안 봄)", !stopJ.reason.includes("축으로"));
+check("이미 한 번 되돌렸으면(stop_hook_active) 다시 막지 않음", G.run({ hook_event_name: "Stop", transcript_path: tr, stop_hook_active: true }, { block: blockList }).code === 0 && !G.run({ hook_event_name: "Stop", transcript_path: tr, stop_hook_active: true }, { block: blockList }).stdout);
+check("chat: warn이면 알리기만 함", JSON.parse(G.run({ hook_event_name: "Stop", transcript_path: tr }, { block: blockList, chat: "warn" }).stdout).systemMessage.includes("재"));
+check("질문마다 바꿔 쓸 말을 일러 줌(UserPromptSubmit)", G.run({ hook_event_name: "UserPromptSubmit" }, { block: blockList, soft: [{ w: "인사이트", to: "시사점" }] }).stdout.includes("재다→측정하다, 축→기준, ~을 통해→~(으)로, 인사이트→시사점"));
+
+// 용어 문항 검사(build.js)
+console.log("\n[용어 문항 검사]");
+const writeLex = o => fs.writeFileSync(path.join(pb, "lex.json"), JSON.stringify(o));
+const pLex = JSON.parse(fs.readFileSync(path.join(pb, "lex.json"), "utf8"));
+const bl1 = JSON.parse(JSON.stringify(pLex)); bl1.items[0].texts["재다"] = "앱이 뜨는 시간을 열 번 달아 보니 평균 2초였습니다.";
+writeLex(bl1);
+check("문장에 그 말의 꼴이 없으면 build가 막음", node([B_, "--bank", pb]).out.includes("measure.r: '재다' 문장에 그 말의 꼴"));
+const bl2 = JSON.parse(JSON.stringify(pLex)); bl2.items[0].texts["측정하다"] = "앱이 뜨는 시간을 열 번 재 보니 측정 결과 평균 2초였습니다.";
+writeLex(bl2);
+check("문장이 다른 말의 꼴에도 걸리면 build가 막음", node([B_, "--bank", pb]).out.includes("'측정하다' 문장이 다른 말 '재다'의 꼴"));
+const bl3 = JSON.parse(JSON.stringify(pLex)); bl3.concepts[2].options[0].forms.push("축");
+writeLex(bl3);
+check("한 글자 꼴은 build가 막음", node([B_, "--bank", pb]).out.includes("꼴 '축'가 너무 짧음"));
+const bl4 = JSON.parse(JSON.stringify(pLex)); bl4.concepts[2].options[0].forms.push("축하");
+writeLex(bl4);
+check("걸리면 안 되는 문장(neg)에 꼴이 걸리면 build가 막음", node([B_, "--bank", pb]).out.includes("생일 축하합니다"));
+const bl5 = JSON.parse(JSON.stringify(pLex)); bl5.items[1].context = bl5.items[0].context;
+writeLex(bl5);
+check("읽기·쓰기 문항의 상황이 같으면 build가 막음", node([B_, "--bank", pb]).out.includes("measure: 읽기·쓰기 문항의 상황"));
+writeLex(pLex);
+
+// 반영: 출력 스타일·용어 훅·CLAUDE.md를 실제로 써 본다(임시 폴더)
+console.log("\n[반영(apply)]");
+const ap = path.join(tmp, "apply"); fs.mkdirSync(ap);
+const setP = path.join(ap, "settings.json"), mdP = path.join(ap, "CLAUDE.md"), hd = path.join(ap, "hooks"), sd = path.join(ap, "styles");
+fs.writeFileSync(setP, JSON.stringify({ permissions: { allow: ["Bash(ls:*)"] }, hooks: { Stop: [{ hooks: [{ type: "command", command: "echo other" }] }] }, outputStyle: "Explanatory" }));
+const laFile = path.join(ap, "ans.json"); fs.writeFileSync(laFile, JSON.stringify(la));
+const A_ = path.join(__dirname, "apply.js");
+const apArgs = extra => [A_, laFile, "--claude-md", mdP, "--settings", setP, "--hooks-dir", hd, "--style-dir", sd, "--hook", path.join(ap, "none.py")].concat(extra);
+const show = node(apArgs([]));
+check("반영안에 출력 스타일·용어 훅·용어 줄([lex:말])이 나옴", show.code === 0 && show.out.includes("## 2. 맞춤 출력 스타일") && show.out.includes("## 3. 용어 지키기 훅") && show.out.includes("[lex:재다]"));
+check("보여 주기만 하면 아무 파일도 고치지 않음", !fs.existsSync(mdP) && !fs.existsSync(hd) && JSON.parse(fs.readFileSync(setP, "utf8")).outputStyle === "Explanatory");
+const w1 = node(apArgs(["--write", "--write-style", "--install-guard", "--skip", "lex:컨펌"]));
+const cfg = JSON.parse(fs.readFileSync(setP, "utf8"));
+check(`CLAUDE.md가 없으면 「대화 선호」 절만 든 파일을 만듦(${w1.code})`, fs.existsSync(mdP) && /^## 대화 선호/.test(fs.readFileSync(mdP, "utf8")) && fs.readFileSync(mdP, "utf8").includes("'재다' → '측정하다'"));
+const styleTxt = fs.existsSync(path.join(sd, "preference.md")) ? fs.readFileSync(path.join(sd, "preference.md"), "utf8") : "";
+check("출력 스타일 파일: 이름·코딩 지침 유지·규칙·용어가 들어감", /^---\nname: 선호 맞춤\n/.test(styleTxt) && styleTxt.includes("keep-coding-instructions: true") && styleTxt.includes("'레버리지' → '활용'"));
+check("outputStyle을 맞춤 스타일로 바꿈", cfg.outputStyle === "선호 맞춤");
+check("permissions와 다른 훅은 그대로 둠", JSON.stringify(cfg.permissions) === JSON.stringify({ allow: ["Bash(ls:*)"] }) && cfg.hooks.Stop.some(g => g.hooks.some(h => h.command === "echo other")));
+check("훅 세 가지를 등록함(UserPromptSubmit·PreToolUse(Write|Edit|MultiEdit)·Stop)", ["UserPromptSubmit", "PreToolUse", "Stop"].every(ev => (cfg.hooks[ev] || []).some(g => g.hooks.some(h => h.command.includes("pref_lex_guard.js")))) && cfg.hooks.PreToolUse.find(g => g.hooks.some(h => h.command.includes("pref_lex_guard"))).matcher === "Write|Edit|MultiEdit");
+const lexInst = JSON.parse(fs.readFileSync(path.join(hd, "pref_lexicon.json"), "utf8"));
+check("--skip한 용어는 규칙 파일·CLAUDE.md에서 빠짐", !lexInst.block.some(a => a.w === "컨펌") && lexInst.block.some(a => a.w === "재다") && !fs.readFileSync(mdP, "utf8").includes("컨펌"));
+check("고친 settings.json의 백업이 남음", fs.readdirSync(ap).some(f => f.startsWith("settings.json.bak-pref-")));
+node(apArgs(["--install-guard"]));
+const cfg2 = JSON.parse(fs.readFileSync(setP, "utf8"));
+check("다시 넣어도 훅이 겹치지 않음", ["UserPromptSubmit", "PreToolUse", "Stop"].every(ev => cfg2.hooks[ev].filter(g => g.hooks.some(h => h.command.includes("pref_lex_guard.js"))).length === 1));
+const runGuard = input => require("child_process").spawnSync(process.execPath, [path.join(hd, "pref_lex_guard.js")], { input: JSON.stringify(input), encoding: "utf8" });
+const g1 = runGuard({ hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: path.join(ap, "메모.md"), content: "열 번 재 보니 2초" } });
+check(`설치한 훅이 혼자 돌아 실제로 막음(exit ${g1.status})`, g1.status === 2 && g1.stderr.includes("측정하다"));
+const g2 = require("child_process").spawnSync(process.execPath, [path.join(hd, "pref_lex_guard.js")], { input: "{깨진 JSON", encoding: "utf8" });
+check("입력이 깨져도 세션을 막지 않음(exit 0)", g2.status === 0);
+const g3 = require("child_process").spawnSync(process.execPath, [path.join(hd, "pref_lex_guard.js")], { input: JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: "a.md", content: "재 보니" } }), encoding: "utf8", env: Object.assign({}, process.env, { PREF_LEX_OFF: "1" }) });
+check("PREF_LEX_OFF=1이면 끔", g3.status === 0);
+const badSet = path.join(ap, "bad.json"); fs.writeFileSync(badSet, "{ 깨짐");
+check("settings.json을 읽지 못하면 고치지 않음", node([A_, laFile, "--claude-md", mdP, "--settings", badSet, "--hooks-dir", hd, "--style-dir", sd, "--write-style"]).code !== 0 && fs.readFileSync(badSet, "utf8") === "{ 깨짐");
 fs.rmSync(tmp, { recursive: true, force: true });
 
 console.log(fail ? `\n실패 ${fail}건` : "\n모두 통과");

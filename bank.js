@@ -1,5 +1,5 @@
 // bank.js — 문항 은행을 읽고 결과 코드를 푸는 공용 함수(build·decode·apply가 같이 쓴다).
-//   문항 은행 = items.json + deep.json. --bank <폴더>를 주면 그 폴더의 것(AI가 사용자에 맞게 짠 것), 없으면 이 폴더의 기본 문항.
+//   문항 은행 = items.json + deep.json + lex.json(용어 고르기). --bank <폴더>를 주면 그 폴더의 것(AI가 사용자에 맞게 짠 것), 없으면 이 폴더의 기본 문항.
 const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
@@ -10,6 +10,9 @@ function loadBank(dir, itemsPath, deepPath) {
   const d = bankDir(dir);
   const bank = JSON.parse(fs.readFileSync(itemsPath ? path.resolve(itemsPath) : path.join(d, "items.json"), "utf8"));
   bank.deep = JSON.parse(fs.readFileSync(deepPath ? path.resolve(deepPath) : path.join(d, "deep.json"), "utf8"));
+  // 용어 고르기는 v1.3에 더했다. 그전에 --init한 폴더에는 lex.json이 없으므로 기본 것을 쓴다
+  const lexPath = fs.existsSync(path.join(d, "lex.json")) ? path.join(d, "lex.json") : path.join(__dirname, "lex.json");
+  if (fs.existsSync(lexPath)) bank.lex = JSON.parse(fs.readFileSync(lexPath, "utf8"));
   if (!bank.id) bank.id = "default-" + bank.version;
   return bank;
 }
@@ -45,8 +48,8 @@ function checkMatch(bank, ans) {
     console.error(`⚠ 이 답은 문항 은행 '${ans.b}'로 만든 설문의 답인데, 지금 읽은 은행은 '${bank.id}'입니다. --bank로 그 설문을 만든 폴더를 주세요.`);
     ok = false;
   }
-  const ids = new Set(bank.ab.map(i => i.id).concat(bank.deep.items.map(i => i.id)));
-  const lost = Object.keys(ans.ab || {}).concat(Object.keys(ans.deep || {})).filter(k => !ids.has(k));
+  const ids = new Set(bank.ab.map(i => i.id).concat(bank.deep.items.map(i => i.id), bank.lex ? bank.lex.items.map(i => i.id) : []));
+  const lost = Object.keys(ans.ab || {}).concat(Object.keys(ans.deep || {}), Object.keys(ans.lex || {})).filter(k => !ids.has(k));
   if (lost.length) {
     console.error(`⚠ 답 ${lost.length}개가 지금 읽은 문항 은행에 없어 채점에서 빠집니다(예: ${lost.slice(0, 3).join(", ")}). --bank로 그 설문을 만든 폴더를 주세요.`);
     ok = false;
@@ -54,4 +57,9 @@ function checkMatch(bank, ans) {
   return ok;
 }
 
-module.exports = { loadBank, readAnswers, checkMatch, bankDir, fail };
+// 1단계 수집(collect.js)이 센 용어 사용 횟수. 그 폴더에 signals.json이 있으면 채점에 쓴다(고른 말이 엇갈릴 때 실제로 쓰는 말을 본다)
+function loadUsage(dir) {
+  try { return JSON.parse(fs.readFileSync(path.join(bankDir(dir), "signals.json"), "utf8")).lexUsage || null; } catch (e) { return null; }
+}
+
+module.exports = { loadBank, readAnswers, checkMatch, bankDir, loadUsage, fail };
