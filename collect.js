@@ -1,6 +1,7 @@
 // collect.js — 1단계: 사용자가 그동안 AI에게 한 말과 지침·기억 파일에서 대화 선호의 근거를 모은다.
 //   node collect.js --out <폴더> [--owner 텔레그램id,id] [--since 2026-04-01] [--max 120] [--project <폴더>]
 //   --claude-dir <폴더>   ~/.claude 대신 읽을 곳(시험용)
+//   --bank <폴더>         용어 횟수를 셀 때 그 폴더의 lex.json을 쓴다(없으면 기본 것)
 //
 // 읽는 곳
 //   ~/.claude/history.jsonl          터미널에서 직접 친 말
@@ -78,11 +79,33 @@ function redact(t) {
 }
 function tagsOf(t) { return Object.keys(TAGS).filter(k => TAGS[k].test(t)); }
 
+// 용어 고르기 묶음(lex.json)의 말을 사람이 실제로 몇 번 썼는지, AI가 답에서 몇 번 썼는지 센다(설문에서 고른 말이 엇갈릴 때와 2단계에서 묶음을 고를 때 쓴다)
+let LEXB = null;
+try { LEXB = JSON.parse(fs.readFileSync(path.join(opt("--bank") ? path.resolve(opt("--bank")) : __dirname, "lex.json"), "utf8")); }
+catch (e) { try { LEXB = JSON.parse(fs.readFileSync(path.join(__dirname, "lex.json"), "utf8")); } catch (e2) { LEXB = null; } }
+const G = require("./lex_guard.js");
+const lexUsage = { user: {}, ai: {}, watch: {} };
+function countLex(text, who) {
+  if (!LEXB || !text) return;
+  LEXB.concepts.forEach(c => c.options.forEach(o => {
+    if (!(o.forms || []).length || !G.findHits(text, [o]).length) return;
+    const u = lexUsage[who][c.id] = lexUsage[who][c.id] || {};
+    u[o.w] = (u[o.w] || 0) + 1;   // 한 메시지에 여러 번 나와도 한 번으로 센다
+  }));
+  // 설문 묶음 밖의 후보 말(watch): 2단계에서 AI가 묶음으로 더할지 정한다
+  (LEXB.watch || []).forEach(o => {
+    if (!G.findHits(text, [o]).length) return;
+    const u = lexUsage.watch[o.w] = lexUsage.watch[o.w] || { user: 0, ai: 0 };
+    u[who]++;
+  });
+}
+
 const said = new Map();   // 같은 말은 한 번만
 const counts = { history: 0, sessions: 0, human: 0, channel: 0, channelSkipped: 0 };
 // 긴 지시문에서 지적·선호가 든 문장만 뽑는다(한 메시지에서 3문장까지). 비밀이 든 문장은 그 문장만 뺀다
 function addSaid(text, ts, src) {
   const raw = stripForeign(text);
+  countLex(raw, "user");
   const t0 = clean(raw);
   if (!t0 || t0.length < 6 || /^[/!]/.test(t0)) return;
   if (t0.length > 3000) return;   // 붙여 넣은 문서·프롬프트
@@ -131,6 +154,12 @@ async function main() {
       if (!st || st.mtimeMs < since) continue;
       counts.sessions++;
       await readLines(fp, line => {
+        if (LEXB && line.includes('"type":"assistant"')) {   // AI가 쓴 글은 용어 횟수만 센다(글은 모으지 않는다)
+          let a; try { a = JSON.parse(line); } catch (e) { return; }
+          const ac = a.message && a.message.content, ats = Date.parse(a.timestamp);
+          if (a.type === "assistant" && !a.isSidechain && Array.isArray(ac) && ats >= since) countLex(ac.filter(b => b.type === "text").map(b => b.text).join("\n"), "ai");
+          return;
+        }
         if (!line.includes('"type":"user"') || line.includes('"toolUseResult":')) return;   // 도구 결과 줄은 풀기 전에 건너뛴다
         let o; try { o = JSON.parse(line); } catch (e) { return; }
         if (o.type !== "user" || o.toolUseResult !== undefined || o.isCompactSummary || o.isSidechain || o.scheduledTaskId) return;
@@ -216,7 +245,7 @@ async function main() {
 
   fs.mkdirSync(outDir, { recursive: true });
   const today = ymd(Date.now());
-  fs.writeFileSync(path.join(outDir, "signals.json"), JSON.stringify({ date: today, since: sinceStr, counts, readFiles, tags: tagCount, prevResult, rules, feedback, said: list }, null, 1));
+  fs.writeFileSync(path.join(outDir, "signals.json"), JSON.stringify({ date: today, since: sinceStr, counts, readFiles, tags: tagCount, prevResult, rules, feedback, said: list, lexUsage }, null, 1));
   const o = [];
   o.push(`# 대화 선호 근거 (모은 날 ${today}, ${sinceStr}부터)`);
   o.push(`- 읽은 것: 터미널 입력 ${counts.history}건, 세션 ${counts.sessions}개(사람이 친 말 ${counts.human}건, 채널 메시지 ${counts.channel}건${owners.length ? "" : " — 주인 id(--owner)를 주지 않아 채널 메시지는 모두 뺌"}, 다른 사람이 보낸 채널 메시지 ${counts.channelSkipped}건 뺌), 피드백 기억 ${feedback.length}개`);
@@ -235,6 +264,18 @@ async function main() {
     feedback.forEach(fb => o.push(`- [${fb.d}] ${fb.name}: ${fb.text}`));
     o.push(`\n## 3. 대화에서 한 말`);
     list.forEach(s => o.push(`- [${s.d} ${s.src} #${s.tags.join(" #")}] ${s.text}`));
+  }
+  if (LEXB) {
+    o.push(`\n## 4. 용어: 사람이 쓴 말과 AI가 쓴 말(메시지 수)`);
+    o.push("AI가 자주 쓰는데 사람은 거의 안 쓰는 말이 바꿔 쓸 후보다. 2단계에서 그런 묶음을 남기고, 기록에 자주 나온 다른 AI 버릇 말은 묶음으로 더한다.");
+    LEXB.concepts.forEach(c => {
+      const fmt = who => c.options.map(op => `${op.w} ${(lexUsage[who][c.id] || {})[op.w] || 0}`).join(" · ");
+      o.push(`- ${c.name}: 사람 ${fmt("user")} / AI ${fmt("ai")}`);
+    });
+    const w = Object.entries(lexUsage.watch).sort((a, b) => (b[1].ai - b[1].user) - (a[1].ai - a[1].user)).filter(([, v]) => v.ai);
+    o.push(`\n## 5. 설문 밖의 후보 말: AI가 쓴 말(메시지 수, AI가 사람보다 많이 쓴 순)`);
+    o.push(w.length ? "AI가 자주 쓰고 사람은 거의 안 쓰는 말은 2단계에서 묶음으로 만든다(설계원칙.md 5절). 이 목록에 없는 말도 AI가 스스로 자주 쓴다고 보이면 더한다." : "AI 답에서 후보 말이 나오지 않았다.");
+    w.forEach(([k, v]) => o.push(`- ${k}: AI ${v.ai} · 사람 ${v.user}`));
   }
   o.push(`\n## 다음\nAI는 이 파일과 설계원칙.md를 읽고 문항을 짠다(SKILL.md 2단계). 이 파일에는 사용자의 원래 말이 들어 있으므로 폴더 밖으로 보내지 않고, git 저장소 안이면 .gitignore에 넣는다.`);
   fs.writeFileSync(path.join(outDir, "signals.md"), o.join("\n") + "\n");

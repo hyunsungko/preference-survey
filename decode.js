@@ -16,7 +16,7 @@ const readAnswers = B.readAnswers;
 const bank = B.loadBank(opt("--bank"), opt("--items"), opt("--deep"));
 const ans = readAnswers(src);
 B.checkMatch(bank, ans);
-const res = S.score(bank, ans);
+const res = S.score(bank, ans, { usage: B.loadUsage(opt("--bank")) });
 if (args.includes("--json")) { console.log(JSON.stringify(res, null, 1)); process.exit(0); }
 
 const rel = res.reliability;
@@ -48,9 +48,20 @@ res.tone.byContext.forEach(c => console.log(`- ${c.context}: ${c.pick ? bank.ton
 console.log(`\n## 거슬린다고 한 것`);
 const dis = res.ox.filter(o => o.dislike);
 console.log(dis.length ? dis.map(o => "- " + o.text).join("\n") : "- 없음");
+if (res.lex.concepts.length || res.lex.user.length) {
+  console.log(`\n## 용어`);
+  res.lex.concepts.forEach(c => {
+    const used = Object.keys(c.used || {}).filter(w => c.used[w]).map(w => `${w} ${c.used[w]}번`).join(", ");
+    console.log(`- ${c.name}: ${c.prefer ? `쓸 말 '${c.prefer}'(신뢰 ${c.conf})` : "-"} · ${c.how}${c.disliked.length ? ` · 거슬림 ${c.disliked.join(", ")}` : ""}${used ? ` · 기록에서 쓴 말 ${used}` : ""}`);
+  });
+  if (res.lex.avoid.length) {
+    console.log(`- 바꿔 쓸 말(막음 = 훅이 막고 바꿔 쓰게 함 / 지침만):`);
+    res.lex.avoid.forEach(a => console.log(`  - ${a.w} → ${a.toSay || a.to || "다른 말"} [${a.strong ? "막음" : "지침만"} · ${a.why}${a.user && a.forms.length === 1 && a.forms[0] === a.w ? " · 적은 꼴 그대로만 찾음(활용형은 AI가 꼴을 더한다)" : ""}]`));
+  }
+}
 if (res.open.length) {
   console.log(`\n## 직접 적은 말 (AI가 읽고 지침 후보로 바꿀 것)`);
-  res.open.forEach(o => console.log(`- [${o.id}] ${o.text}`));
+  res.open.forEach(o => console.log(`- [${o.id}] ${o.text.replace(/\n/g, " / ")}${o.id === "lex.more" ? " (용어 줄로 읽은 것은 위 '용어'에 있음)" : ""}`));
 }
 if (res.unsure.length) {
   console.log(`\n## 고르지 못한 문항 (점수에 넣지 않음)`);

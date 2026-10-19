@@ -8,6 +8,7 @@
 const fs = require("fs");
 const path = require("path");
 const B = require("./bank.js");
+const G = require("./lex_guard.js");
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 
@@ -19,7 +20,7 @@ const init = opt("--init");
 if (init) {
   const d = path.resolve(init);
   fs.mkdirSync(d, { recursive: true });
-  ["items.json", "deep.json"].forEach(f => {
+  ["items.json", "deep.json", "lex.json"].forEach(f => {
     if (fs.existsSync(path.join(d, f))) B.fail(`${path.join(d, f)}가 이미 있습니다. 덮어쓰지 않습니다.`);
   });
   const items = JSON.parse(fs.readFileSync(path.join(__dirname, "items.json"), "utf8"));
@@ -27,6 +28,7 @@ if (init) {
   items.base = items.version;
   fs.writeFileSync(path.join(d, "items.json"), JSON.stringify(items, null, 1));
   fs.copyFileSync(path.join(__dirname, "deep.json"), path.join(d, "deep.json"));
+  fs.copyFileSync(path.join(__dirname, "lex.json"), path.join(d, "lex.json"));
   console.log(`복사함: ${d} (문항 은행 id ${items.id}). 설계원칙.md대로 고친 뒤 node build.js --bank "${d}"`);
   process.exit(0);
 }
@@ -124,6 +126,64 @@ if (fu) {
   (fu.open || []).forEach(o => { if (!/^f\./.test(o.id || "") || !o.text) problems.push(`추가 주관식 ${o.id}: id는 'f.'로 시작하고 text가 있어야 함`); });
 }
 
+// 7-1) 용어 고르기: 묶음마다 읽기·쓰기 문항 하나씩(상황이 달라야 함), 문항 글은 고른 말의 꼴에만 걸려야 한다(훅이 그 말을 찾을 수 있게, 다른 말로 잘못 막지 않게)
+const L = bank.lex;
+if (L) {
+  if (!L.read_prompt || !L.self_prompt) problems.push("용어: read_prompt·self_prompt가 있어야 함");
+  if (!L.more || !/^lex\./.test(L.more.id || "") || !L.more.text) problems.push("용어: more(직접 적기)는 id가 'lex.'로 시작하고 text가 있어야 함");
+  if (L.concepts.length > 40) problems.push(`용어 묶음 ${L.concepts.length}개(40개까지 — 훑기 화면이 너무 길어진다)`);
+  if (!L.scan_prompt) problems.push("용어: scan_prompt(훑기 화면 질문)가 있어야 함");
+  L.concepts.forEach(c => { if (!(c.options || []).some(o => o.ai)) problems.push(`용어 ${c.id}: AI 버릇 말(ai: true)이 하나는 있어야 함(훑기 화면에 보일 말)`); });
+  const cids = L.concepts.map(c => c.id);
+  if (new Set(cids).size !== cids.length) problems.push("용어 묶음 id 중복");
+  const allForms = [];
+  L.concepts.forEach(c => {
+    if (!c.id || !c.name) problems.push(`용어 묶음 ${c.id || "(id 없음)"}: id·name이 있어야 함`);
+    const ws = (c.options || []).map(o => o.w);
+    if (ws.length < 2 || ws.length > 4) problems.push(`용어 ${c.id}: 고를 말이 ${ws.length}개(2~4개)`);
+    if (new Set(ws).size !== ws.length) problems.push(`용어 ${c.id}: 같은 말이 두 번 있음`);
+    (c.options || []).forEach(o => {
+      const forms = o.forms || [];
+      if (o.ai && !forms.length) problems.push(`용어 ${c.id}/${o.w}: AI 버릇 말(ai)은 찾을 꼴(forms)이 있어야 함`);
+      forms.forEach(f => {
+        if ([...f.replace(/^~/, "")].length < 2) problems.push(`용어 ${c.id}/${o.w}: 꼴 '${f}'가 너무 짧음(2자 이상 — 다른 낱말까지 걸린다)`);
+        allForms.push({ c: c.id, w: o.w, f });
+      });
+    });
+    ["read", "self"].forEach(k => {
+      const n = L.items.filter(i => i.concept === c.id && i.kind === k).length;
+      if (n !== 1) problems.push(`용어 ${c.id}: ${k} 문항 ${n}개(1개여야 함)`);
+    });
+    const ctx = new Set(L.items.filter(i => i.concept === c.id).map(i => i.context));
+    if (ctx.size < 2) problems.push(`용어 ${c.id}: 읽기·쓰기 문항의 상황(context)이 같음(달라야 한 상황의 취향만 보지 않는다)`);
+  });
+  L.items.forEach(it => {
+    const c = L.concepts.find(x => x.id === it.concept);
+    if (!c) { problems.push(`용어 문항 ${it.id}: 없는 묶음 ${it.concept}`); return; }
+    if (it.id !== `${it.concept}.${it.kind === "read" ? "r" : "s"}`) problems.push(`용어 문항 ${it.id}: id는 '${it.concept}.r'(읽기)이나 '${it.concept}.s'(쓰기)여야 함`);
+    if (!it.context) problems.push(`용어 문항 ${it.id}: context 없음`);
+    const texts = it.texts || {};
+    c.options.forEach(o => { if (!texts[o.w]) problems.push(`용어 문항 ${it.id}: '${o.w}' 문장이 없음`); });
+    if (new Set(Object.values(texts)).size !== Object.values(texts).length) problems.push(`용어 문항 ${it.id}: 똑같은 문장이 있음`);
+    c.options.forEach(o => {
+      const t = texts[o.w]; if (!t) return;
+      if ((o.forms || []).length && !G.findHits(t, [o]).length) problems.push(`용어 문항 ${it.id}: '${o.w}' 문장에 그 말의 꼴(forms)이 하나도 걸리지 않음 — 꼴을 더하거나 문장을 고친다`);
+      c.options.filter(z => z.w !== o.w).forEach(z => {
+        const h = G.findHits(t, [z]);
+        if (h.length) problems.push(`용어 문항 ${it.id}: '${o.w}' 문장이 다른 말 '${z.w}'의 꼴 '${h[0].hit}'에 걸림`);
+      });
+    });
+  });
+  (L.watch || []).forEach(o => {
+    if (!o.w || !(o.forms || []).length) problems.push(`용어 후보(watch) ${o.w || "(이름 없음)"}: w·forms가 있어야 함`);
+    (o.forms || []).forEach(f => { if ([...f.replace(/^~/, "")].length < 2) problems.push(`용어 후보 ${o.w}: 꼴 '${f}'가 너무 짧음(2자 이상)`); });
+  });
+  (L.neg || []).forEach(t => {
+    const h = G.findHits(t, allForms.map(x => ({ w: `${x.c}/${x.w}`, forms: [x.f] })));
+    if (h.length) problems.push(`용어: 걸리면 안 되는 문장 "${t}"이 ${h.map(x => `${x.w}의 '${x.hit}'`).join(", ")}에 걸림`);
+  });
+}
+
 // 8) 중복 id
 const ids = bank.ab.map(i => i.id).concat(bank.deep.items.map(i => i.id));
 if (new Set(ids).size !== ids.length) problems.push("문항 id 중복");
@@ -134,7 +194,7 @@ function texts(o, where) {
   if (typeof o === "string") PII.forEach(([re, what]) => { if (re.test(o)) problems.push(`${where}: ${what}가 들어 있음 — "${o.slice(0, 40)}"`); });
   else if (o && typeof o === "object") Object.keys(o).forEach(k => { if (!["id", "axis", "set", "sit"].includes(k)) texts(o[k], where === "" ? k : where); });
 }
-texts({ axes: bank.axes, ab: bank.ab, tone: bank.tone, ox: bank.ox, deep: bank.deep }, "");
+texts({ axes: bank.axes, ab: bank.ab, tone: bank.tone, ox: bank.ox, deep: bank.deep, lex: L ? { concepts: L.concepts, items: L.items } : null }, "");
 
 if (problems.length) { console.error("문항 은행 문제:\n- " + problems.join("\n- ")); process.exit(1); }
 
@@ -153,4 +213,4 @@ const html = tpl
   .replace("/*__BANK__*/null", () => safe(bank))
   .replace("/*__PRIOR__*/null", () => (prior ? safe(prior) : "null"));
 fs.writeFileSync(outPath, html);
-console.log(`만듦: ${outPath} (${(Buffer.byteLength(html) / 1024).toFixed(1)}KB, 은행 ${bank.id} · 축 ${bank.axes.length} · 고르기 ${bank.ab.length} · 말투 ${bank.tone.items.length} · 싫은 것 ${bank.ox.length} · 상황별 ${bank.deep.items.length}${prior ? ` · 이어받은 1차 답 + 추가 질문 ${(fu.ask || []).length}개·주관식 ${(fu.open || []).length}개` : ""})`);
+console.log(`만듦: ${outPath} (${(Buffer.byteLength(html) / 1024).toFixed(1)}KB, 은행 ${bank.id} · 축 ${bank.axes.length} · 고르기 ${bank.ab.length} · 말투 ${bank.tone.items.length} · 싫은 것 ${bank.ox.length} · 상황별 ${bank.deep.items.length} · 용어 ${L ? L.items.length : 0}${prior ? ` · 이어받은 1차 답 + 추가 질문 ${(fu.ask || []).length}개·주관식 ${(fu.open || []).length}개` : ""})`);
