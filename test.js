@@ -398,6 +398,24 @@ const g2 = require("child_process").spawnSync(process.execPath, [path.join(hd, "
 check("입력이 깨져도 세션을 막지 않음(exit 0)", g2.status === 0);
 const g3 = require("child_process").spawnSync(process.execPath, [path.join(hd, "pref_lex_guard.js")], { input: JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: "a.md", content: "재 보니" } }), encoding: "utf8", env: Object.assign({}, process.env, { PREF_LEX_OFF: "1" }) });
 check("PREF_LEX_OFF=1이면 끔", g3.status === 0);
+check("규칙 파일에 swap 자리가 생김", Array.isArray(lexInst.swap));
+const lexP = path.join(hd, "pref_lexicon.json");
+fs.writeFileSync(lexP, JSON.stringify(Object.assign(JSON.parse(fs.readFileSync(lexP, "utf8")), { swap: [["재 (?=[보봤본볼봐])", "측정해 "]] })));
+node(apArgs(["--install-guard"]));
+check("다시 넣어도 swap(채팅 바꾸기)은 지우지 않음", JSON.parse(fs.readFileSync(lexP, "utf8")).swap.length === 1);
+
+// 채팅 바꾸기 목록(words.js)
+console.log("\n[채팅 바꾸기 목록]");
+const W = require("./words.js");
+const wc = W.compile([["재 (?=[보봤본볼봐])", "측정해 "], ["잰 ", "측정한 "], ["((", "x"]]);
+check("틀린 패턴을 오류로 잡음", wc.bad.length === 1 && wc.ok.length === 2);
+check("낱말 가운데는 바꾸지 않음(현재는)", W.overMatch(wc.ok, ["현재 보니 괜찮다", "따로 잰 결과"]).length === 1);
+const wu = W.uncovered({ block: [{ w: "재다", forms: ["재 보", "잰 ", "쟀다"] }] }, wc.ok);
+check("swap이 없는 막을 말의 꼴을 찾음(쟀다)", wu.length === 1 && wu[0] === "재다: 쟀다");
+const wm = W.merge({ chat: "block", block: [1], swap: [["잰 ", "측정한 "]] }, { swap: [["잰 ", "잰 것 "], ["쟀다", "측정했다"]] });
+check("제안을 합치면 더할 것과 바꿀 것을 나눠 보여 주고 다른 칸은 그대로 둠", wm.added.length === 1 && wm.changed.length === 1 && wm.next.chat === "block" && wm.next.block.length === 1);
+check("흔한 문장 목록을 읽음", W.samples().length >= 30);
+
 const badSet = path.join(ap, "bad.json"); fs.writeFileSync(badSet, "{ 깨짐");
 check("settings.json을 읽지 못하면 고치지 않음", node([A_, laFile, "--claude-md", mdP, "--settings", badSet, "--hooks-dir", hd, "--style-dir", sd, "--write-style"]).code !== 0 && fs.readFileSync(badSet, "utf8") === "{ 깨짐");
 fs.rmSync(tmp, { recursive: true, force: true });

@@ -3,6 +3,7 @@
 //   UserPromptSubmit  질문마다 바꿔 쓸 말 목록을 짧게 일러 준다(쓰기 전에 막는 단계)
 //   PreToolUse        글 파일(.md·.txt 등)에 막기로 한 말을 쓰려 하면 쓰지 않고(exit 2) 바꿀 말을 알려 준다. Claude가 고쳐서 다시 쓴다
 //   Stop              방금 채팅 답에 막기로 한 말이 있으면 한 번 되돌려 그 말만 바꿔 다시 쓰게 한다(stop_hook_active면 다시 막지 않는다)
+//                     word-fence mod(mod/word-fence)를 설치했으면 mod가 swap대로 먼저 바꾸므로, 여기서는 swap에 없던 꼴만 남는다
 // 규칙: 이 파일 옆의 pref_lexicon.json(또는 환경 변수 PREF_LEXICON). PREF_LEX_OFF=1이면 아무것도 하지 않는다.
 // 인용("…", '…', 「…」), 코드(`…`, ```…```), 링크, '>' 인용 줄은 검사하지 않는다. 훅이 잘못돼도 세션을 막지 않도록 오류는 조용히 넘긴다.
 "use strict";

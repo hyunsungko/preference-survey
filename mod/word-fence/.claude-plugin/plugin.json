@@ -1,0 +1,5 @@
+{
+  "name": "word-fence",
+  "version": "1.0.0",
+  "description": "선호 진단 용어 규칙(pref_lexicon.json)의 swap 목록대로, 채팅 답이 화면에 나가기 전에 막을 말을 바꿀 말로 바꾼다. 인용·코드·링크는 그대로 둔다."
+}

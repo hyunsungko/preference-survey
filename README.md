@@ -52,7 +52,8 @@ git clone https://github.com/hyunsungko/preference-survey ~/.claude/skills/prefe
 4. **추가 질문**: 애매하게 나온 축과 고르지 못한 문항을 모아, AI가 추가 질문 설문을 만들어 줍니다. 생략해도 됩니다.
 5. **반영**: 결과를 세 곳에 나눠 보여 줍니다. 사용자가 승인한 줄만 넣고, 권한 설정은 건드리지 않습니다.
    - **맞춤 출력 스타일**("선호 맞춤"): 말투·길이·형식·용어 규칙을 묶어 `outputStyle`로 씁니다. CLAUDE.md 「대화 선호」 절로 넣을 수도 있습니다.
-   - **용어 지키기 훅**: 질문마다 바꿔 쓸 말을 일러 줍니다. 글 파일(.md·.txt)에 막기로 한 말을 쓰려 하면 쓰지 않고 바꿔 쓰게 합니다. 채팅 답에 그 말이 나오면 한 번 되돌려 그 말만 바꿔 다시 쓰게 합니다.
+   - **용어 지키기 훅**: 질문마다 바꿔 쓸 말을 일러 줍니다. 글 파일(.md·.txt)에 막기로 한 말을 쓰려 하면 쓰지 않고 바꿔 쓰게 합니다.
+   - **채팅 바꾸기 mod(word-fence)**: 채팅 답에 막기로 한 말이 나오면, 화면에 나가기 전에 그 자리에서 바꿀 말로 바꿉니다. 답을 다시 쓰지 않으므로 같은 답이 두 번 나오지 않습니다. 인용·코드·링크 안의 말은 그대로 둡니다. 바꿀 꼴 목록(`swap`)은 AI가 짜고 사용자가 승인한 것만 넣습니다(`node words.js merge <제안> --write`, 설치는 처음 한 번 `node words.js install --yes`). 목록에 없는 꼴은 훅이 답을 한 번 되돌려 다시 쓰게 합니다.
    - 경고만 하는 글쓰기 검사 훅 패턴(이모지, 느낌표, 정해진 말).
 
 자세한 절차는 `SKILL.md`, 측정 설계와 계산식은 `설계.md`에 있습니다.
@@ -78,6 +79,7 @@ git clone https://github.com/hyunsungko/preference-survey ~/.claude/skills/prefe
 | `score.js` | 채점(화면과 도구가 같이 씀) |
 | `lex.json` | 용어 고르기 문항과 말마다 찾을 활용형 |
 | `lex_guard.js` | 용어 지키기 훅(설치하면 `~/.claude/hooks/pref_lex_guard.js`) |
+| `mod/word-fence/`·`words.js` | 채팅 바꾸기 mod, 바꿀 꼴 목록 점검·합치기·mod 설치 |
 | `decode.js`·`apply.js` | 결과 풀기, 반영안(`--write-style`·`--install-guard`·`--write`) |
 | `test.js` | 가상 응답자 시험(`node test.js`) |
 | `설계원칙.md`·`설계.md` | 문항 규칙, 측정 설계 |

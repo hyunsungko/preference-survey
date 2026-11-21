@@ -10,7 +10,8 @@
 //
 // 나누는 기준
 //   판단이 필요한 글쓰기 습관(채팅 답 포함)           → CLAUDE.md 「대화 선호」 절 또는 맞춤 출력 스타일(둘 중 하나)
-//   바꿔 쓸 용어                                       → 위 규칙 + 용어 지키기 훅(질문마다 일러 주고, 글 파일에 쓰려 하면 막고, 채팅 답에 나오면 다시 쓰게 함)
+//   바꿔 쓸 용어                                       → 위 규칙 + 용어 지키기 훅(질문마다 일러 주고, 글 파일에 쓰려 하면 막음)
+//                                                        + word-fence mod(채팅 답의 막을 말을 swap대로 화면에 나가기 전에 바꿈, 남은 것은 Stop 훅)
 //   기계로 잡을 수 있는 것(이모지·느낌표·정해진 말)   → 경고만 하는 글쓰기 검사 훅 패턴. 이 훅은 파일에 쓰는 글(Write·Edit)만 검사한다
 //   권한(permissions)은 안전 설정이라 건드리지 않는다
 const fs = require("fs");
@@ -147,12 +148,16 @@ out.push("- 넣기: `--write-style`(스타일 파일을 쓰고 settings.json out
 
 // 3) 용어 지키기 훅: 질문마다 일러 주고(UserPromptSubmit), 글 파일에 쓰려 하면 막고(PreToolUse), 채팅 답에 나오면 다시 쓰게 한다(Stop)
 const guardPath = path.join(hooksDir, "pref_lex_guard.js"), lexPath = path.join(hooksDir, "pref_lexicon.json");
+// swap(채팅 답에서 word-fence mod가 바꾸는 꼴)은 AI가 짜고 사용자가 승인해 words.js로 넣는다. 다시 넣을 때 지우지 않는다
+let oldSwap = [];
+try { oldSwap = JSON.parse(fs.readFileSync(lexPath, "utf8")).swap || []; } catch (e) { /* 처음이면 없다 */ }
 const lexFile = {
   made: `선호 진단 ${res.date}`, chat: chatMode, remind: true,
   exts: [".md", ".markdown", ".txt", ".rst", ".adoc"],
   skipPaths: ["/.claude/skills/preference-survey/"],
   block: lexKept.filter(a => a.strong).map(a => ({ w: a.w, to: a.toSay || a.to, forms: a.forms })),
-  soft: lexKept.filter(a => !a.strong).map(a => ({ w: a.w, to: a.toSay || a.to }))
+  soft: lexKept.filter(a => !a.strong).map(a => ({ w: a.w, to: a.toSay || a.to })),
+  swap: oldSwap
 };
 const guardCmd = `node "${guardPath}"`;
 out.push(`\n## 3. 용어 지키기 훅 — ${guardPath}`);
@@ -161,8 +166,9 @@ else {
   out.push(`- 막을 말 ${lexFile.block.length}개: ${lexFile.block.map(a => `${a.w}→${a.to || "다른 말"}`).join(", ") || "없음"}`);
   out.push(`- 지침만 ${lexFile.soft.length}개: ${lexFile.soft.map(a => `${a.w}→${a.to || "다른 말"}`).join(", ") || "없음"}`);
   out.push("- 하는 일: ① 질문마다 바꿔 쓸 말 목록을 한 줄로 일러 준다(쓰기 전에 막는 단계). ② .md·.txt 같은 글 파일에 막을 말을 쓰려 하면 쓰지 않고, 바꿀 말을 알려 줘 고쳐 쓰게 한다.");
-  out.push(`  ③ 채팅 답에 막을 말이 나오면 ${chatMode === "block" ? "한 번 되돌려 그 말만 바꿔 다시 쓰게 한다(이미 보인 답 아래에 고친 답이 붙는다)" : chatMode === "warn" ? "알리기만 한다" : "아무것도 하지 않는다"}. 인용·코드·링크 안의 말은 검사하지 않는다.`);
-  out.push(`- 넣기: \`--install-guard\`(훅·규칙 파일을 ${hooksDir}에 쓰고 settings.json hooks에 UserPromptSubmit·PreToolUse(Write|Edit|MultiEdit)·Stop을 등록). 끄려면 환경 변수 PREF_LEX_OFF=1.`);
+  out.push(`  ③ 채팅 답: word-fence mod가 swap 목록대로 막을 말을 화면에 나가기 전에 바꾼다(답이 두 번 나오지 않음, 지금 swap ${oldSwap.length}개). swap에 없는 꼴이 남으면 Stop 훅이 ${chatMode === "block" ? "한 번 되돌려 그 말만 바꿔 다시 쓰게 한다(이미 보인 답 아래에 고친 답이 붙는다)" : chatMode === "warn" ? "알리기만 한다" : "아무것도 하지 않는다"}. 인용·코드·링크 안의 말은 바꾸거나 검사하지 않는다.`);
+  out.push("  swap은 AI가 막을 말의 활용형마다 바꿀 꼴을 짜서 `<폴더>/swap_proposal.json`(`{\"swap\": [[\"패턴\", \"바꿀 말\"], ...]}`)에 쓰고, `node words.js merge <제안>`으로 보여 주고 승인받아 `--write`로 넣는다.");
+  out.push(`- 넣기: \`--install-guard\`(훅·규칙 파일을 ${hooksDir}에 쓰고 settings.json hooks에 UserPromptSubmit·PreToolUse(Write|Edit|MultiEdit)·Stop을 등록) → \`node words.js install --yes\`(mod 설치, 처음 한 번). 끄려면 환경 변수 PREF_LEX_OFF=1.`);
 }
 
 // 4) 경고 훅(word_guard.py) 패턴
@@ -192,7 +198,7 @@ if (opens.length || notes.length) {
   notes.forEach(u => out.push(`- [${u.id} ${u.kind}] ${u.note}${u.prompt ? `  ← 문항: ${u.prompt}` : ""}`));
 }
 if (res.followup.recommend && !ans.round && ans.fu !== "skip") out.push(`\n※ 애매한 축(${res.followup.axes.join(", ") || "없음"})과 고르지 못한 문항 ${res.followup.items}개가 있다. 사용자가 생략을 고르지 않았으면, 넣기 전에 추가 질문을 권한다(SKILL.md 4단계).`);
-out.push(`\n## 6. 넣는 순서\n1. 위 반영안을 사용자에게 보여 주고 줄마다 넣을지 묻는다(⚠ 줄은 기존 지침과 어느 쪽을 남길지 함께 묻는다). 용어는 [lex:말] 줄마다, 특히 '막음' 줄을 꼭 확인받는다.\n2. 규칙은 출력 스타일(\`--write-style\`)이나 CLAUDE.md(\`--write\`) 중 하나로 넣는다. 둘 다 \`--skip <뺄 키>\`를 따른다.\n3. 용어는 \`--install-guard\`로 훅을 넣어야 실제로 막힌다. 경고 훅(4번)은 사용자가 고른 줄만 손으로 넣는다.\n4. 넣은 뒤 일상 질문 5개로 전·후 답을 가려 고르게 해 검증한다(SKILL.md 5단계).`);
+out.push(`\n## 6. 넣는 순서\n1. 위 반영안을 사용자에게 보여 주고 줄마다 넣을지 묻는다(⚠ 줄은 기존 지침과 어느 쪽을 남길지 함께 묻는다). 용어는 [lex:말] 줄마다, 특히 '막음' 줄을 꼭 확인받는다.\n2. 규칙은 출력 스타일(\`--write-style\`)이나 CLAUDE.md(\`--write\`) 중 하나로 넣는다. 둘 다 \`--skip <뺄 키>\`를 따른다.\n3. 용어는 \`--install-guard\`로 훅을 넣어야 실제로 막힌다. 채팅 답에서 바로 바꾸려면 swap을 \`node words.js merge <제안> --write\`로 넣고 \`node words.js install --yes\`로 mod를 설치한다. 경고 훅(4번)은 사용자가 고른 줄만 손으로 넣는다.\n4. 넣은 뒤 일상 질문 5개로 전·후 답을 가려 고르게 해 검증한다(SKILL.md 5단계).`);
 console.log(out.join("\n"));
 
 // 쓰기 전에 원본을 남긴다: 시각을 붙이고, 같은 이름이 있으면 덮어쓰지 않는다(처음 원본을 지키기 위해)

@@ -1,0 +1,11 @@
+{
+  "name": "preference-survey",
+  "owner": { "name": "hyunsungko" },
+  "plugins": [
+    {
+      "name": "word-fence",
+      "source": "./word-fence",
+      "description": "선호 진단에서 막기로 한 말을 채팅 답이 화면에 나가기 전에 바꿀 말로 바꾼다."
+    }
+  ]
+}
